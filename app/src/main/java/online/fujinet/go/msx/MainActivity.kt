@@ -1,0 +1,139 @@
+package online.fujinet.go.msx
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.core.content.ContextCompat
+import android.view.InputDevice
+import online.fujinet.go.msx.fujinet.FujiNetWebViewActivity
+import online.fujinet.go.msx.input.GameControllerMapper
+import online.fujinet.go.msx.input.MsxKeyMapper
+import online.fujinet.go.msx.ui.EmulatorScreen
+import online.fujinet.go.msx.ui.theme.FujiNetGoMsxTheme
+
+/**
+ * FujiNet Go MSX main screen: the MSX display plus the on-screen keyboard and a
+ * control bar. The native layer (openMSX + the in-process FujiNet runtime over
+ * FujiBusPacket-over-SLIP) is owned by [EmulatorSessionService] (a foreground
+ * service) so it keeps running across activity changes (e.g. the FujiNet web
+ * admin) and while backgrounded. The session itself is a process singleton; the
+ * Power button stops both.
+ */
+class MainActivity : ComponentActivity() {
+
+    private lateinit var session: SessionController
+
+    // Routes a Bluetooth/USB game controller to the MSX joystick.
+    private val gamepad by lazy {
+        GameControllerMapper(
+            onDirection = { up, down, left, right -> session.joyDirection(up, down, left, right) },
+            onButton = { id, pressed -> session.joyButton(id, pressed) },
+        )
+    }
+
+    private val requestNotifications =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* best effort */ }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (intent?.action == EmulatorSessionService.ACTION_SHUTDOWN) {
+            shutdown()
+            return
+        }
+        enableEdgeToEdge()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Hold clocks steady over a long emulation session (thermals permitting)
+        // rather than letting DVFS oscillate the 60Hz loop off schedule.
+        window.setSustainedPerformanceMode(true)
+        session = SessionController.get(applicationContext)
+
+        maybeRequestNotificationPermission()
+        EmulatorSessionService.start(this)
+
+        setContent {
+            FujiNetGoMsxTheme {
+                Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
+                    EmulatorScreen(
+                        session = session,
+                        onOpenFujiNet = ::openFujiNet,
+                        onOpenSettings = ::openSettings,
+                        onShutdown = ::shutdown,
+                        modifier = Modifier.safeDrawingPadding(),
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == EmulatorSessionService.ACTION_SHUTDOWN) {
+            shutdown()
+        }
+    }
+
+    private fun openFujiNet() {
+        startActivity(Intent(this, FujiNetWebViewActivity::class.java))
+    }
+
+    private fun openSettings() {
+        startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    /** Stop the emulator + FujiNet and close the app. */
+    private fun shutdown() {
+        EmulatorSessionService.shutdown(this)
+        finishAndRemoveTask()
+    }
+
+    private fun maybeRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (::session.isInitialized && gamepad.onMotion(event)) return true
+        return super.onGenericMotionEvent(event)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (::session.isInitialized && gamepad.onKey(event)) return true
+        if (::session.isInitialized && routeHardwareKey(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** Route a physical keyboard key to the emulated MSX via [MsxKeyMapper]. */
+    private fun routeHardwareKey(event: KeyEvent): Boolean {
+        val isKeyboard = (event.source and InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD
+        if (!isKeyboard || event.keyCode == KeyEvent.KEYCODE_BACK) return false
+        val mapped = MsxKeyMapper.map(event) ?: return false
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> session.keyDown(mapped.keysym, mapped.character, mapped.mods)
+            KeyEvent.ACTION_UP -> session.keyUp(mapped.keysym, mapped.character, mapped.mods)
+            else -> return false
+        }
+        return true
+    }
+
+    // No session.stop() here: the foreground service owns the session's lifetime
+    // so it survives this activity being finished. Stopping is explicit, via the
+    // Power button -> shutdown().
+}

@@ -1,0 +1,38 @@
+--- SDL2-2.30.7.orig/src/video/SDL_egl.c
++++ SDL2-2.30.7/src/video/SDL_egl.c
+@@ -577,15 +577,10 @@
+         return SDL_SetError("SDL_EGL_LoadLibraryOnly() has not been called or has failed.");
+     }
+
+-    /* Check for all extensions that are optional until used and fail if any is missing */
+-    if (!_this->egl_data->eglQueryDevicesEXT) {
+-        return SDL_SetError("eglQueryDevicesEXT is missing (EXT_device_enumeration not supported by the drivers?)");
+-    }
+-
+-    if (!_this->egl_data->eglGetPlatformDisplayEXT) {
+-        return SDL_SetError("eglGetPlatformDisplayEXT is missing (EXT_platform_base not supported by the drivers?)");
+-    }
+-
++    /* FujiNet Go MSX: EGL_EXT_device_enumeration is optional (Android/Adreno does
++       not expose eglQueryDevicesEXT). Use it when present; otherwise fall back to
++       a normal headless context on the default display (see the else below). */
++    if (_this->egl_data->eglQueryDevicesEXT && _this->egl_data->eglGetPlatformDisplayEXT) {
+     if (_this->egl_data->eglQueryDevicesEXT(SDL_EGL_MAX_DEVICES, egl_devices, &num_egl_devices) != EGL_TRUE) {
+         return SDL_SetError("eglQueryDevicesEXT() failed");
+     }
+@@ -636,6 +631,15 @@
+             return SDL_SetError("Could not find a valid EGL device to initialize");
+         }
+     }
++    } else {
++        /* FujiNet Go MSX: no EGL_EXT_device_enumeration -> default display. */
++        (void)egl_devices; (void)num_egl_devices; (void)egl_device_hint;
++        _this->egl_data->egl_display = _this->egl_data->eglGetDisplay(EGL_DEFAULT_DISPLAY);
++        if ((_this->egl_data->egl_display == EGL_NO_DISPLAY) ||
++            (_this->egl_data->eglInitialize(_this->egl_data->egl_display, NULL, NULL) != EGL_TRUE)) {
++            return SDL_SetError("Could not initialize EGL on the default display");
++        }
++    }
+
+     /* Get the EGL version with a valid egl_display, for EGL <= 1.4 */
+     SDL_EGL_GetVersion(_this);

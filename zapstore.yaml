@@ -1,0 +1,18 @@
+repository: https://github.com/FujiNetWIFI/fujinet-go-msx
+description: FujiNet Go MSX is a portable MSX emulator for Android with built-in FujiNet support, bringing modern networking to classic computing. Run your favorite MSX, MSX2, MSX2+ and MSX turboR software while accessing network-hosted disk images, services, and multiplayer experiences just like real FujiNet hardware, but entirely in software. The openMSX emulator and the FujiNet firmware run together in one app, joined over a loopback socket. Boot C-BIOS out of the box, or import your own system ROMs and switch between machine profiles. Take your MSX anywhere! No cables, no disks, no limits!
+summary: FujiNet Go MSX brings the classic MSX computing experience to Android with built-in FujiNet support
+tags:
+    - retrocomputing
+    - msx
+    - msx2
+    - vintagecomputing
+    - emulation
+    - emulator
+    - fujinet
+    - openmsx
+    - games
+    - retrogaming
+    - gaming
+license: GPL-3.0
+metadata_sources:
+    - github

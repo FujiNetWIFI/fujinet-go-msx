@@ -1,0 +1,50 @@
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS Files
+*.log
+.DS_Store
+
+# Generated files and folders
+captures/
+.externalNativeBuild/
+.cxx/
+*.aab
+*.apk
+output-metadata.json
+app/.cxx/
+app/build/
+app/debug/
+app/src/main/cpp-generated/
+app/src/main/assets-generated/
+app/src/main/jniLibs-generated/
+tools/openmsx/work/
+tools/fujinet/work/
+
+# IntelliJ
+*.iml
+.idea/
+.kotlin/
+.planning/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+
+# Keystore files
+*.jks
+*.keystore
+keystore.properties
+
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof
+
+# AI
+AGENTS.md
+LEAN-CTX.md

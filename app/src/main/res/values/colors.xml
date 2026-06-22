@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FujiNet Go MSX launcher icon background blue (classic MSX blue);
+         also the UI accent. -->
+    <color name="ic_launcher_background">#0000FF</color>
+</resources>
