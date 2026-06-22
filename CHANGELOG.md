@@ -162,6 +162,13 @@ end-to-end path.
     than us guessing the codepoint. KANA shows the JIS katakana legends; CAP
     shows upper-case. (Katakana/graphic glyphs render fully on a Japanese machine
     ROM; C-BIOS is roman-only.)
+- **Control bar icons + accent** (matching fujinet-go-apple2): the text labels
+  (Joy / Reset / FujiNet / Cfg / Power) are now Material icons (Keyboard,
+  Gamepad, RestartAlt, Settings, PowerSettingsNew) plus the **FujiNet logo**
+  (`fujinet_toolbar.png`, tinted to the accent via `BlendMode.Modulate`); needs
+  `material-icons-extended`. The **UI accent** is now the FS-A1 keycap amber-
+  orange (`#F2871E`) instead of MSX blue, so the toolbar, the FujiNet logo, and
+  Material widgets (radios/buttons) all match the on-screen keyboard.
 
 ### Verified
 - openMSX + FujiNet cross-compile and link for all three packaged ABIs

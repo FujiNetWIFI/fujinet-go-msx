@@ -7,14 +7,14 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// Accent derived from the FujiNet Go MSX launcher icon's blue background
-// (#0000FF -- the classic MSX blue), with dark blue-tinted surfaces to match.
-private val FujiBlue = Color(0xFF0000FF)
+// UI accent: the FS-A1 keycap-legend amber-orange (#F2871E, matching the
+// on-screen keyboard), over dark surfaces.
+private val FujiOrange = Color(0xFFF2871E)
 private val FujiDark = Color(0xFF080814)
 private val FujiPanel = Color(0xFF141428)
 
 private val DarkColors = darkColorScheme(
-    primary = FujiBlue,
+    primary = FujiOrange,
     onPrimary = Color.White,
     background = FujiDark,
     surface = FujiPanel,
@@ -22,7 +22,7 @@ private val DarkColors = darkColorScheme(
 )
 
 private val LightColors = lightColorScheme(
-    primary = FujiBlue,
+    primary = FujiOrange,
     onPrimary = Color.White,
 )
 

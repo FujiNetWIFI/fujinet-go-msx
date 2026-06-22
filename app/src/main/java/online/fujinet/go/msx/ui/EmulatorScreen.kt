@@ -1,16 +1,25 @@
 package online.fujinet.go.msx.ui
 
 import android.content.res.Configuration
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,16 +28,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import online.fujinet.go.msx.R
 import online.fujinet.go.msx.SessionController
 
 /**
  * The main app screen: the MSX video surface, a thin control bar (toggle
- * keyboard, reset, open the FujiNet web UI, shut down), and the on-screen
- * keyboard. Mirrors the other FujiNet Go targets' EmulatorScreen, MSX-ised.
+ * keyboard / joystick, reset, open the FujiNet web UI, settings, shut down), and
+ * the on-screen keyboard. Mirrors the other FujiNet Go targets' EmulatorScreen,
+ * MSX-ised.
  */
 @Composable
 fun EmulatorScreen(
@@ -110,27 +123,53 @@ private fun ControlBar(
             .padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        BarButton("⌨", Modifier.weight(1f), keyboardActive, onToggleKeyboard)
-        BarButton("Joy", Modifier.weight(1f), joystickActive, onToggleJoystick)
-        BarButton("Reset", Modifier.weight(1f), onClick = onReset)
-        BarButton("FujiNet", Modifier.weight(1.2f), onClick = onOpenFujiNet)
-        BarButton("Cfg", Modifier.weight(1f), onClick = onOpenSettings)
-        BarButton("Power", Modifier.weight(1f), onClick = onShutdown)
+        BarButton(Icons.Filled.Keyboard, "Keyboard", Modifier.weight(1f), keyboardActive, onToggleKeyboard)
+        BarButton(Icons.Filled.Gamepad, "Joystick", Modifier.weight(1f), joystickActive, onToggleJoystick)
+        BarButton(Icons.Filled.RestartAlt, "Reset", Modifier.weight(1f), onClick = onReset)
+        FujiNetBarButton(Modifier.weight(1f), onClick = onOpenFujiNet)
+        BarButton(Icons.Filled.Settings, "Settings", Modifier.weight(1f), onClick = onOpenSettings)
+        BarButton(Icons.Filled.PowerSettingsNew, "Power off", Modifier.weight(1f), onClick = onShutdown)
+    }
+}
+
+/**
+ * The FujiNet web-UI button: the FujiNet "dot" logo, with its white tile tinted
+ * to the UI accent (Modulate keeps the black centre dot black and the corners
+ * transparent, recolouring only the white).
+ */
+@Composable
+private fun FujiNetBarButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.fujinet_toolbar),
+            contentDescription = "FujiNet web UI",
+            modifier = Modifier.size(24.dp),
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary, BlendMode.Modulate),
+        )
     }
 }
 
 @Composable
 private fun BarButton(
-    label: String,
+    icon: ImageVector,
+    contentDescription: String,
     modifier: Modifier = Modifier,
     active: Boolean = false,
     onClick: () -> Unit,
 ) {
-    TextButton(onClick = onClick, modifier = modifier) {
-        Text(
-            label,
-            fontSize = 13.sp,
-            color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
         )
     }
 }
