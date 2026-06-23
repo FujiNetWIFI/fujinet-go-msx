@@ -23,8 +23,6 @@
 // the surface msx_host drives: boot the Reactor, capture the software-rendered
 // frame, tap the Mixer, and inject input via the EventDistributor.
 #include "Reactor.hh"
-#include "MSXMotherBoard.hh"
-#include "MSXEventDistributor.hh"
 #include "CommandLineParser.hh"
 #include "EventDistributor.hh"
 #include "Event.hh"
@@ -106,15 +104,16 @@ std::atomic<bool> g_omsx_thread_done{true}; // false while openmsx_thread_main r
 openmsx::Reactor* g_reactor = nullptr;   // valid only on the openMSX thread
 
 // Input injection is cross-thread: msxhost_inject_key / msxhost_set_joystick_*
-// run on the UI/JNI thread, but the MSX devices read from the per-motherboard
-// MSXEventDistributor, which is NOT thread-safe and must be driven on the openMSX
-// thread. (We deliberately bypass the global EventDistributor: openMSX's ImGui
-// layer sits above the MSX keyboard there and swallows key events when it wants
-// the keyboard.) So the UI thread only enqueues openMSX events; drain_pending_events()
-// dispatches them on the openMSX thread, once per rendered frame from the
-// SDL_GL_SwapWindow hook (MSXEventDistributor::distributeEvent at the motherboard's
-// current time). openMSX Event objects just wrap a POD SDL_Event, so building them
-// off-thread is safe.
+// run on the UI/JNI thread; they enqueue openMSX Event objects (just POD SDL_Event
+// wrappers, safe to build off-thread). drain_pending_events() forwards them on the
+// openMSX thread (from the SDL_GL_SwapWindow hook) into the *global* EventDistributor
+// -- i.e. the exact path desktop openMSX uses for real SDL input: EventDistributor
+// -> EventDelay -> MSX keyboard/joystick. EventDelay schedules the press/release at
+// consistent emulation times; injecting straight into the per-motherboard
+// MSXEventDistributor (bypassing EventDelay) made held keys get read twice across
+// FujiNet-config screen transitions (e.g. ENTER both confirming a host edit and
+// opening the slot). The earlier ImGui-interception worry was really the
+// SDL_SCANCODE_UNKNOWN drop (now fixed via SDL_GetScancodeFromKey).
 std::mutex g_event_mutex;
 std::vector<openmsx::Event> g_event_queue;
 
@@ -197,6 +196,17 @@ void openmsx_thread_main() {
             // hence the double braces {{...}}. This must never abort the boot.
             try {
                 auto& cc = reactor->getCommandController();
+                // Keep the emulation pinned to real-time. The FujiNet device holds the
+                // MSX in a "loading" state while it streams, so with the default
+                // fullspeedwhenloading=on openMSX runs the CPU flat-out -- which makes
+                // emulated time race ahead of wall-clock. The MSX BIOS key auto-repeat
+                // is timed in emulated frames (~0.5s onset on a real machine), so at
+                // full speed that onset collapses to a few tens of real milliseconds:
+                // a normal finger tap (50-100ms) outlasts it and repeats, producing
+                // doubled characters. Forcing real-time restores the ~0.5s onset, so a
+                // tap is comfortably one character and only a deliberate hold repeats.
+                cc.executeCommand("set throttle on");
+                cc.executeCommand("set fullspeedwhenloading off");
                 cc.executeCommand(
                     "set msxjoystick1_config {UP {{joy1 -axis1}} DOWN {{joy1 +axis1}} "
                     "LEFT {{joy1 -axis0}} RIGHT {{joy1 +axis0}} A {{joy1 button0}} B {{joy1 button1}}}");
@@ -268,8 +278,9 @@ void render_placeholder() {
 // nothing to present, so we read the GLES framebuffer back and push it to the
 // frame sink (the session blits it to the SurfaceView). Runs on the openMSX
 // thread with the GL context current.
-// Dispatch queued input events into the active MSX. Runs on the openMSX thread
-// (from the swap hook), so MSXEventDistributor::distributeEvent is safe here.
+// Forward queued input events into the active MSX via the global EventDistributor
+// (-> EventDelay -> keyboard/joystick), the same path desktop openMSX uses for
+// real SDL input. Runs on the openMSX thread (from the swap hook).
 static void drain_pending_events() {
     if (!g_reactor) return;
     std::vector<openmsx::Event> pending;
@@ -278,12 +289,9 @@ static void drain_pending_events() {
         if (g_event_queue.empty()) return;
         pending.swap(g_event_queue);
     }
-    openmsx::MSXMotherBoard* board = g_reactor->getMotherBoard();
-    if (!board) return;
-    auto& dist = board->getMSXEventDistributor();
-    auto now = board->getCurrentTime();
+    auto& dist = g_reactor->getEventDistributor();
     for (auto& e : pending) {
-        dist.distributeEvent(e, now);
+        dist.distributeEvent(std::move(e));
     }
 }
 

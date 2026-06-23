@@ -240,6 +240,14 @@ patch("build.sh", [
         '        pip install platformio || exit 1\n',
         '        pip install platformio pyyaml jinja2 || exit 1\n',
     ),
+    (
+        # The PC build runs its unit tests via ctest after building. For an Android
+        # cross-build the test binaries target the device, so running them on this
+        # host fails with "Exec format error". Skip them when cross-compiling.
+        '  # run unit tests\n  ctest -V --progress\n',
+        '  # run unit tests (skip for Android cross-builds: target-arch binaries)\n'
+        '  if [ -z "${ANDROID_ABI}" ] ; then ctest -V --progress ; else echo "Skipping unit tests (Android cross-build)" ; true ; fi\n',
+    ),
 ])
 
 # --- fujinet_pc.cmake: SHARED target, mbedTLS, expat, dist ----------------

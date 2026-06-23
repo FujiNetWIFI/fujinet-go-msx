@@ -150,10 +150,54 @@ end-to-end path.
   device connects (ESTABLISHED socket), and the config's host list populates.
 - **FS-A1 keyboard overhaul**:
   - **Look**: amber-orange legends on charcoal keycaps (was blue/white).
-  - **Press/release input**: keys press on touch-down and release on touch-up
-    (with an 80 ms minimum so the matrix scan always latches) instead of a fixed
-    80 ms tap -- fixes the double/"bounced" keys and lets the firmware's own
-    typematic repeat apply on a held key.
+  - **Inject through EventDelay (the real fix for the double-keypress bugs)**:
+    keys/joystick are forwarded through openMSX's *global* EventDistributor ->
+    EventDelay -> device -- the exact path desktop openMSX uses for SDL input --
+    instead of being injected straight into the per-motherboard
+    MSXEventDistributor. The bypass skipped EventDelay's emulation-time
+    scheduling, which made a held key get read twice across FujiNet-config screen
+    transitions: ENTER both confirming a host-slot edit *and* opening the slot,
+    plus occasional double letters / backspaces. Same symptom never occurred with
+    the same config ROM on desktop openMSX over BoIP, which pointed straight at
+    the injection path. (The original reason for bypassing -- ImGui "eating" keys
+    -- was really the SDL_SCANCODE_UNKNOWN drop, since fixed.)
+  - **Stable gesture key (fixes SHIFT-then-symbol repeating endlessly)**: each
+    keycap's `pointerInput` is keyed on a *stable* id, not its label. SHIFT/GRAPH/
+    KANA change a key's label, and Compose restarts `pointerInput` when its key
+    changes -- cancelling the in-flight gesture before touch-up, so the keycap's
+    release never fired and the key stuck down (the firmware then auto-repeated it
+    forever, e.g. SHIFT then `!`). The down/up callbacks are held via
+    `rememberUpdatedState` so the long-lived handler always calls the current ones.
+  - **One tap = one character, via a precise emulated-time matrix hold (the real
+    fix for doubled/dropped keys)**: the on-screen keyboard now injects a key press
+    and release *back-to-back* (the finger's own dwell time is ignored), and openMSX
+    holds the matrix latched for exactly ~2 vertical interrupts of **emulated** time
+    before releasing. This re-enables openMSX's own touch-keyboard release-delay
+    (`EventDelay`), which lived behind `#if PLATFORM_ANDROID` (forced off here) and
+    referenced a refactored-away `TimedEvent`/`Keys::K_MASK` API; it is ported to the
+    current event API and made unconditional via an idempotent staged-source patch in
+    `tools/openmsx/build-openmsx-core.sh`. Crucially the hold is scheduled in
+    *emulated* time (`setSyncPoint(pressTime + 2/50 s)`), **not** the host clock or
+    the coarse/irregular RealTime sync cadence, so it is a precise 2 interrupts
+    regardless of emulation speed -- long enough for the MSX matrix scan to latch one
+    press, short enough to release before the firmware auto-repeats. This matters
+    because the bundled **C-BIOS auto-repeats aggressively** (≈ every 78 ms with
+    almost no initial delay; a 1 s hold yields ~13 characters), unlike a real MSX
+    BIOS's ~0.5 s onset -- so any finger-duration or fixed real-time hold doubles
+    unpredictably, whereas the precise 2-interrupt hold is exactly one character
+    (verified on device: clean letter runs, and SHIFT+1/SHIFT+2 each produce a single
+    `!`/`"`). Trade-off: press-and-hold no longer auto-repeats; tap repeatedly to
+    repeat.
+  - **Keep emulation at real-time** (`throttle on`, `fullspeedwhenloading off` in
+    `msx_host.cpp`): the FujiNet device holds the MSX in a "loading" state while it
+    streams, so openMSX would otherwise run the CPU flat-out (emulated time racing
+    ahead of wall-clock). Pinning to real-time keeps the machine's speed/audio
+    correct. (The keyboard hold above is emulated-time based, so it is robust either
+    way; this is general-correctness.)
+  - **Contact-jitter debounce**: a real finger can flicker (down -> micro-lift
+    -> down), which the tap detector reports as two presses. A second press of
+    the same key within 120 ms of the last is ignored -- far sooner than any
+    intentional re-tap, so deliberately-spaced double letters still register.
   - **SHIFT layer**: F1-F5 show **F6-F10**, HOME shows **CLS**, and the number /
     symbol legends switch to their shifted faces while SHIFT is lit.
   - **GRAPH / CODE / かな(KANA) / CAP layers**: modifiers are injected into
@@ -169,6 +213,14 @@ end-to-end path.
   `material-icons-extended`. The **UI accent** is now the FS-A1 keycap amber-
   orange (`#F2871E`) instead of MSX blue, so the toolbar, the FujiNet logo, and
   Material widgets (radios/buttons) all match the on-screen keyboard.
+- **Resync to upstream**: rebuilt the openMSX core from the updated `feat/fujinet`
+  checkout (bundling its newer `fujinet-config.rom`) and `libfujinet` from the
+  updated `fujinet-pc-msx` (now reports FN VER v1.6.2-dev). build-fujinet.sh gained
+  a transform to **skip the PC unit tests on Android cross-builds** -- upstream
+  added a `ctest` step that aborts the build because the target-arch test binaries
+  can't run on the host ("Exec format error"). All ABIs rebuilt; on-device the new
+  config ROM boots, connects over BoIP :1986 (ESTABLISHED), and the keyboard drives
+  it (c -> Configuration).
 
 ### Verified
 - openMSX + FujiNet cross-compile and link for all three packaged ABIs

@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,11 +32,10 @@ import kotlinx.coroutines.delay
 import online.fujinet.go.msx.SessionController
 import online.fujinet.go.msx.input.Msx
 
-// Minimum keypress duration: long enough for the MSX matrix scan (and the FujiNet
-// config's key poll) to latch even a quick tap. Longer presses release on
-// finger-up, so the firmware's own typematic repeat applies -- no fixed-duration
-// over-hold (the old cause of double/"bounced" keys).
-private const val KEY_MIN_HOLD_MS = 80L
+// Contact-jitter debounce: ignore a second press of the same key within this many
+// ms of the last (a real finger can flicker down->micro-lift->down; that re-press
+// is far sooner than any intentional re-tap of the same key).
+private const val KEY_DEBOUNCE_MS = 120L
 
 // --- FS-A1 colour scheme: amber/orange legends on charcoal keycaps ------------
 private val KeyBg = Color(0xFF2B2B2B)        // charcoal keycap
@@ -141,20 +141,28 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
     // unicode codepoint instead -- CHARACTER mapping then yields the exact char and
     // encodes SHIFT itself, so we must NOT also inject the SHIFT matrix key there.
     fun pressKey(k: Key): List<Int> {
+        // Replicate the exact SDL event sequence desktop openMSX gets from a real
+        // keyboard. Hold the active modifier key(s) in the matrix first, then the
+        // base key: GRAPH/CODE/KANA/CTRL with unicode 0 (firmware maps the glyph);
+        // plain/SHIFT with the (shifted) unicode + matching KMOD. Crucially, when
+        // SHIFT is lit we inject the real SHIFT key *and* the shifted codepoint -- so
+        // openMSX sees SHIFT already down and just presses the key once. (Sending the
+        // shifted codepoint *without* a held SHIFT made openMSX press/release SHIFT
+        // itself around the key, adding edges -> doubled characters.)
         val useMatrix = graph || code || kana || ctrl
         val ch = when {
             useMatrix -> 0
             shift -> k.shiftAscii
             else -> k.ascii
         }
-        val inject = if (useMatrix) buildList {
+        val inject = buildList {
             if (graph) add(Msx.K_GRAPH)
             if (code) add(Msx.K_CODE)
             if (ctrl) add(Msx.K_LCTRL)
             if (shift) add(Msx.K_LSHIFT)
-        } else emptyList()
+        }
         for (m in inject) session.keyDown(m, 0, 0)
-        session.keyDown(k.code, ch, if (shift && !useMatrix) Msx.MOD_SHIFT else 0)
+        session.keyDown(k.code, ch, if (shift) Msx.MOD_SHIFT else 0)
         clearOneShot()
         return listOf(k.code) + inject
     }
@@ -197,23 +205,23 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
             val fKeys = listOf(Msx.K_F1, Msx.K_F2, Msx.K_F3, Msx.K_F4, Msx.K_F5)
             fKeys.forEachIndexed { i, sym ->
                 val label = if (shift) "F${i + 6}" else "F${i + 1}"
-                KeyCap(label, Modifier.weight(1f),
+                KeyCap(label, sym, Modifier.weight(1f),
                     onDown = { pressSpecial(sym, withShift = true) }, onUp = { releaseChord(it) })
             }
-            KeyCap("STOP", Modifier.weight(1.2f),
+            KeyCap("STOP", Msx.K_STOP, Modifier.weight(1.2f),
                 onDown = { pressSpecial(Msx.K_STOP, false) }, onUp = { releaseChord(it) })
-            KeyCap("SEL", Modifier.weight(1.2f),
+            KeyCap("SEL", Msx.K_SELECT, Modifier.weight(1.2f),
                 onDown = { pressSpecial(Msx.K_SELECT, false) }, onUp = { releaseChord(it) })
-            KeyCap("INS", Modifier.weight(1f),
+            KeyCap("INS", Msx.K_INSERT, Modifier.weight(1f),
                 onDown = { pressSpecial(Msx.K_INSERT, false) }, onUp = { releaseChord(it) })
-            KeyCap("DEL", Modifier.weight(1f),
+            KeyCap("DEL", Msx.K_DELETE, Modifier.weight(1f),
                 onDown = { pressSpecial(Msx.K_DELETE, false) }, onUp = { releaseChord(it) })
         }
 
         for (rowKeys in listOf(ROW1, ROW2, ROW3, ROW4)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 for (k in rowKeys) {
-                    KeyCap(faceOf(k), Modifier.weight(k.weight),
+                    KeyCap(faceOf(k), k.code, Modifier.weight(k.weight),
                         onDown = { pressKey(k) }, onUp = { releaseChord(it) })
                 }
             }
@@ -225,12 +233,12 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
             ModKey("SHIFT", shift, Modifier.weight(1.2f)) { shift = !shift }
             ModKey("GRAPH", graph, Modifier.weight(1.3f)) { graph = !graph }
             ModKey("CODE", code, Modifier.weight(1.2f)) { code = !code }
-            KeyCap("ESC", Modifier.weight(1f),
+            KeyCap("ESC", Msx.K_ESCAPE, Modifier.weight(1f),
                 onDown = { pressSpecial(Msx.K_ESCAPE, false) }, onUp = { releaseChord(it) })
-            KeyCap("SPACE", Modifier.weight(3f),
+            KeyCap("SPACE", Msx.K_SPACE, Modifier.weight(3f),
                 onDown = { pressPlain(Msx.K_SPACE, 32) },
                 onUp = { releaseChord(it) })
-            KeyCap("RET", Modifier.weight(1.6f),
+            KeyCap("RET", Msx.K_RETURN, Modifier.weight(1.6f),
                 onDown = { pressPlain(Msx.K_RETURN, 13) },
                 onUp = { releaseChord(it) })
         }
@@ -239,47 +247,63 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             ModKey("CAP", caps, Modifier.weight(1f)) { caps = !caps; session.tapKey(Msx.K_CAPS, 0, 0) }
             ModKey("かな", kana, Modifier.weight(1f)) { kana = !kana; session.tapKey(Msx.K_CODE, 0, 0) }
-            KeyCap("TAB", Modifier.weight(1f),
+            KeyCap("TAB", Msx.K_TAB, Modifier.weight(1f),
                 onDown = { pressPlain(Msx.K_TAB, 9) }, onUp = { releaseChord(it) })
-            KeyCap("BS", Modifier.weight(1f),
+            KeyCap("BS", Msx.K_BACKSPACE, Modifier.weight(1f),
                 onDown = { pressPlain(Msx.K_BACKSPACE, 8) }, onUp = { releaseChord(it) })
-            KeyCap(if (shift) "CLS" else "HOME", Modifier.weight(1f),
+            KeyCap(if (shift) "CLS" else "HOME", Msx.K_HOME, Modifier.weight(1f),
                 onDown = { pressSpecial(Msx.K_HOME, withShift = true) }, onUp = { releaseChord(it) })
-            KeyCap("←", Modifier.weight(1f), onDown = { pressSpecial(Msx.K_LEFT, false) }, onUp = { releaseChord(it) })
-            KeyCap("↓", Modifier.weight(1f), onDown = { pressSpecial(Msx.K_DOWN, false) }, onUp = { releaseChord(it) })
-            KeyCap("↑", Modifier.weight(1f), onDown = { pressSpecial(Msx.K_UP, false) }, onUp = { releaseChord(it) })
-            KeyCap("→", Modifier.weight(1f), onDown = { pressSpecial(Msx.K_RIGHT, false) }, onUp = { releaseChord(it) })
+            KeyCap("←", Msx.K_LEFT, Modifier.weight(1f), onDown = { pressSpecial(Msx.K_LEFT, false) }, onUp = { releaseChord(it) })
+            KeyCap("↓", Msx.K_DOWN, Modifier.weight(1f), onDown = { pressSpecial(Msx.K_DOWN, false) }, onUp = { releaseChord(it) })
+            KeyCap("↑", Msx.K_UP, Modifier.weight(1f), onDown = { pressSpecial(Msx.K_UP, false) }, onUp = { releaseChord(it) })
+            KeyCap("→", Msx.K_RIGHT, Modifier.weight(1f), onDown = { pressSpecial(Msx.K_RIGHT, false) }, onUp = { releaseChord(it) })
         }
     }
 }
 
 /**
  * A momentary keycap: presses on touch-down and releases on touch-up, so the
- * emulated key is held exactly as long as the finger is down (matching real
- * hardware and avoiding the multi-frame "bounce" of a fixed-duration tap). A
- * plain Box (not a Button) so its own click handling doesn't swallow the
- * press/release gesture.
+ * emulated key is pressed once per tap, for a fixed repeat-safe span. A plain
+ * Box (not a Button) so its own click handling doesn't swallow the gesture.
  */
 @Composable
-private fun KeyCap(label: String, modifier: Modifier = Modifier, onDown: () -> List<Int>, onUp: (List<Int>) -> Unit) {
+private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onDown: () -> List<Int>, onUp: (List<Int>) -> Unit) {
+    // Timestamp of the last accepted press, for contact-jitter debounce. A plain
+    // holder (not Compose state) so updating it doesn't trigger recomposition.
+    val lastDownMs = remember { longArrayOf(0L) }
+    // The press handlers are read live (rememberUpdatedState) because pointerInput
+    // is keyed on the stable [keyId], not the (changing) label -- so the gesture
+    // coroutine survives a label change mid-press.
+    val downHandler by rememberUpdatedState(onDown)
+    val upHandler by rememberUpdatedState(onUp)
     Box(
         modifier = modifier
             .height(46.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(KeyBg)
-            .pointerInput(label) {
+            // Key on [keyId] (stable per key), NOT [label]: SHIFT/GRAPH/KANA change a
+            // key's label, and keying on it would restart pointerInput and cancel the
+            // in-flight gesture before touch-up -- leaving the key stuck down (endless
+            // auto-repeat, e.g. SHIFT then '!').
+            .pointerInput(keyId) {
                 detectTapGestures(onPress = {
-                    val chord = onDown()
-                    val downAt = System.currentTimeMillis()
-                    tryAwaitRelease()
-                    // Hold at least KEY_MIN_HOLD_MS so the MSX keyboard matrix scan
-                    // (~2 vertical interrupts) latches the press even for a very
-                    // quick tap; longer presses release on finger-up, so the
-                    // firmware's own typematic repeat behaves naturally (no fixed
-                    // multi-frame "bounce").
-                    val dt = System.currentTimeMillis() - downAt
-                    if (dt < KEY_MIN_HOLD_MS) delay(KEY_MIN_HOLD_MS - dt)
-                    onUp(chord)
+                    val now = System.currentTimeMillis()
+                    if (now - lastDownMs[0] >= KEY_DEBOUNCE_MS) {
+                        lastDownMs[0] = now
+                        // Inject press + release back-to-back, regardless of how long the
+                        // finger rests on the key. openMSX's (re-enabled) touch-keyboard
+                        // release-delay in EventDelay correlates the two and holds the
+                        // matrix latched ~2 vertical interrupts -- long enough for the MSX
+                        // to register exactly one key-press, then released before the
+                        // firmware's auto-repeat onset. (See the EventDelay patch in
+                        // tools/openmsx/build-openmsx-core.sh.) This makes one tap exactly
+                        // one character on C-BIOS, whose auto-repeat is otherwise too fast
+                        // to leave a safe fixed hold window.
+                        val chord = downHandler()
+                        upHandler(chord)
+                    } else {
+                        tryAwaitRelease()
+                    }
                 })
             },
         contentAlignment = Alignment.Center,

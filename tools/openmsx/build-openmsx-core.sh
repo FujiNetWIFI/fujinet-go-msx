@@ -181,6 +181,114 @@ patch_staged_source() {
         echo "Patched ${fn}: FUJINET_DEFAULT_PORT -> 1986"
     fi
 
+    # Re-enable openMSX's touch-keyboard release-delay in EventDelay, ported to the
+    # current event API (the original lives behind #if PLATFORM_ANDROID, which we
+    # force off, and references a refactored-away TimedEvent/Keys::K_MASK API). Our
+    # on-screen keyboard injects a key press + release back-to-back; without this,
+    # the release reaches the MSX before the keyboard-matrix scan can latch the
+    # press (a missed tap), or -- on the fast-repeating C-BIOS -- the matrix is read
+    # inconsistently (doubled characters). This correlates each release with its
+    # press and, when they arrive < 2 vertical interrupts apart, re-emits the
+    # release (restamped to "now") on a later sync, holding the matrix latched just
+    # long enough to register exactly one key-press and releasing it before the
+    # firmware's auto-repeat onset. sync() is driven periodically by RealTime, so
+    # the re-emitted release is retried every sync until ~2 interrupts have elapsed.
+    local edcc="${STAGE_DIR}/src/input/EventDelay.cc"
+    local edhh="${STAGE_DIR}/src/input/EventDelay.hh"
+    if [[ -f "${edcc}" ]] && ! grep -q 'FujiNetGoMSX' "${edcc}"; then
+        python3 - "${edcc}" "${edhh}" <<'PY'
+import re, sys
+cc_path, hh_path = sys.argv[1], sys.argv[2]
+
+# --- EventDelay.hh: make nonMatchedKeyPresses unconditional ------------------
+hh = open(hh_path).read()
+hh_old = ("#if PLATFORM_ANDROID\n"
+          "\tstd::vector<std::pair<int, Event>> nonMatchedKeyPresses;\n"
+          "#endif\n")
+hh_new = ("\t// FujiNetGoMSX: always on -- code -> press EmuTime. See EventDelay.cc::sync.\n"
+          "\tstd::vector<std::pair<int, EmuTime>> nonMatchedKeyPresses;\n")
+assert hh_old in hh, "EventDelay.hh: nonMatchedKeyPresses #if block not found"
+open(hh_path, "w").write(hh.replace(hh_old, hh_new))
+
+# --- EventDelay.cc: replace the whole sync() body with the ported version ----
+cc = open(cc_path).read()
+new_sync = r'''void EventDelay::sync(EmuTime curEmu)
+{
+	auto curRealTime = Timer::getTime();
+	auto realDuration = curRealTime - prevReal;
+	prevReal = curRealTime;
+	auto emuDuration = curEmu - prevEmu;
+	prevEmu = curEmu;
+
+	double factor = emuDuration.toDouble() / narrow_cast<double>(realDuration);
+	EmuDuration extraDelay = EmuDuration::sec(delaySetting.getDouble());
+
+	// FujiNetGoMSX touch-keyboard release delay (always on; openMSX's own
+	// PLATFORM_ANDROID path is forced off and references a refactored-away API).
+	// The on-screen keyboard injects a key press + release back-to-back, far too
+	// close for the MSX to scan the matrix in between -- so the tap would be missed,
+	// or, on the fast-repeating C-BIOS, read inconsistently. Correlate each release
+	// with its press and, if it arrives less than 2 vertical interrupts after, push
+	// the release out to exactly press-time + 2 interrupts via the Scheduler. Using
+	// emulated time (curEmu / setSyncPoint), not the host clock or the (coarse,
+	// irregular) RealTime sync cadence, makes the hold a precise ~2 MSX interrupts
+	// regardless of host clock or emulation speed: long enough to register exactly
+	// one key-press, short enough to release before the firmware auto-repeats.
+
+	EmuTime time = curEmu + extraDelay;
+	for (auto& e : toBeScheduledEvents) {
+		if (getType(e) == one_of(EventType::KEY_DOWN, EventType::KEY_UP)) {
+			const auto& keyEvent = get_event<KeyEvent>(e);
+			int code = int(keyEvent.getKeyCode());
+			auto it = std::ranges::find(nonMatchedKeyPresses, code,
+			                       [](const auto& p) { return p.first; });
+			if (getType(e) == EventType::KEY_DOWN) {
+				if (it == end(nonMatchedKeyPresses)) {
+					nonMatchedKeyPresses.emplace_back(code, curEmu);
+				} else {
+					it->second = curEmu;
+				}
+			} else {
+				if (it != end(nonMatchedKeyPresses)) {
+					EmuTime pressEmu = it->second;
+					move_pop_back(nonMatchedKeyPresses, it);
+					EmuTime minRelease = pressEmu + EmuDuration::sec(2.0 / 50.0);
+					if (curEmu < minRelease) {
+						// hold the matrix until exactly ~2 interrupts after the press
+						scheduledEvents.push_back(e);
+						setSyncPoint(minRelease);
+						continue;
+					}
+					// enough emulated time already elapsed -> release normally
+				}
+			}
+		}
+		scheduledEvents.push_back(e);
+		const auto& sdlEvent = get_event<SdlEvent>(e);
+		uint32_t eventSdlTime = sdlEvent.getCommonSdlEvent().timestamp;
+		uint32_t sdlNow = SDL_GetTicks();
+		auto sdlOffset = int32_t(sdlNow - eventSdlTime);
+		assert(sdlOffset >= 0);
+		auto offset = 1000 * int64_t(sdlOffset); // ms -> us
+		EmuDuration emuOffset = EmuDuration::sec(factor * narrow_cast<double>(offset));
+		auto schedTime = (emuOffset < extraDelay)
+		               ? time - emuOffset
+		               : curEmu;
+		assert(curEmu <= schedTime);
+		setSyncPoint(schedTime);
+	}
+	toBeScheduledEvents.clear();
+}
+'''
+pat = re.compile(r'void EventDelay::sync\(EmuTime curEmu\)\n\{.*?\n\}\n',
+                 re.DOTALL)
+cc2, n = pat.subn(new_sync, cc, count=1)
+assert n == 1, "EventDelay.cc: sync() function not found/replaced"
+open(cc_path, "w").write(cc2)
+print("Patched EventDelay.{cc,hh}: touch-keyboard release-delay ported (FujiNetGoMSX)")
+PY
+    fi
+
     # GLES3 shim so openMSX's (now non-optional) GL OSD/GUI code compiles against
     # the NDK GLES3 headers; we render via the software rasterizer at runtime.
     local shim="${STAGE_DIR}/android-gl-shim/GL"
