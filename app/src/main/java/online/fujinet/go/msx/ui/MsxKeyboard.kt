@@ -1,18 +1,17 @@
 package online.fujinet.go.msx.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -278,7 +278,7 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
     val upHandler by rememberUpdatedState(onUp)
     Box(
         modifier = modifier
-            .height(46.dp)
+            .height(if (compactKeyboard()) 28.dp else 46.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(KeyBg)
             // Key on [keyId] (stable per key), NOT [label]: SHIFT/GRAPH/KANA change a
@@ -308,22 +308,40 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = KeyText, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 1)
+        Text(label, color = KeyText, fontSize = if (compactKeyboard()) 11.sp else 13.sp, textAlign = TextAlign.Center, maxLines = 1)
     }
 }
 
 @Composable
 private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = modifier,
-        contentPadding = PaddingValues(0.dp),
-        colors = if (active) {
-            ButtonDefaults.buttonColors(containerColor = KeyActiveCap, contentColor = KeyActiveText)
-        } else {
-            ButtonDefaults.buttonColors(containerColor = KeyBg, contentColor = KeyText)
-        },
+    // A Box (not a Material Button, whose 40dp minimum height blocks the compact
+    // TV layout), styled to match KeyCap with the FS-A1 inverted "lit" state.
+    val compact = compactKeyboard()
+    Box(
+        modifier = modifier
+            .height(if (compact) 28.dp else 46.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (active) KeyActiveCap else KeyBg)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
     ) {
-        Text(label, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+        Text(
+            label,
+            color = if (active) KeyActiveText else KeyText,
+            fontSize = if (compact) 10.sp else 11.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
+}
+
+/**
+ * The on-screen keyboard's keys shrink to a compact height on TV and other short
+ * screens (e.g. landscape) so it doesn't fill most of the display.
+ */
+@Composable
+private fun compactKeyboard(): Boolean {
+    val config = LocalConfiguration.current
+    val isTv = (config.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
+    return isTv || config.screenHeightDp < 480
 }
