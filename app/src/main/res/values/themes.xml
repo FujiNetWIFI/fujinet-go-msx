@@ -1,6 +1,14 @@
 <resources>
+    <!--
+      Edge-to-edge friendly: NO android:windowFullscreen (the legacy fullscreen
+      flag fights enableEdgeToEdge() and, on Android 11 / API 30, hides the status
+      bar so the top toolbar ends up under it). The activity calls
+      enableEdgeToEdge() and the content uses Modifier.safeDrawingPadding(), so the
+      system bars are transparent and the toolbar is inset below the status bar on
+      every API level. A black window background avoids a launch flash before the
+      Compose surface draws.
+    -->
     <style name="Theme.FujiNetGoMsx" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:windowBackground">@android:color/black</item>
     </style>
 </resources>
