@@ -36,10 +36,22 @@ class RuntimeInstaller(private val context: Context) {
         }
 
         val openMsxRoot = File(context.filesDir, "openmsx")
-        // init.tcl is openMSX's boot script -- key the completeness check on it so
-        // an older partial install is re-staged when the bundled tree changes.
-        if (force || !File(openMsxRoot, "init.tcl").exists()) {
+        // Re-stage the openMSX tree (C-BIOS ROMs, machine configs, the FujiNet
+        // extension + fujinet-config.rom) whenever the app was (re)installed -- not
+        // only when init.tcl is missing -- so an updated bundled asset (e.g. a new
+        // fujinet-config.rom) actually takes effect on `install -r`, which preserves
+        // <files>. We key off the package's install/update time: it changes on every
+        // (re)install but not on a plain app restart, so normal launches stay fast.
+        // The fujinet tree above stays gated on fnconfig.ini, so the user's hosts /
+        // config / imported SD media survive an app update.
+        val stampFile = File(openMsxRoot, ".staged-install")
+        val installStamp = installStamp()
+        val openMsxStale = force ||
+            !File(openMsxRoot, "init.tcl").exists() ||
+            runCatching { stampFile.readText() }.getOrNull() != installStamp
+        if (openMsxStale) {
             copyAssetDir("openmsx", openMsxRoot)
+            runCatching { stampFile.writeText(installStamp) }
         }
         // The session reads the chosen machine from <fujinet>/openmsx/machine.id;
         // default until the Settings layer writes the active profile selection.
@@ -66,6 +78,12 @@ class RuntimeInstaller(private val context: Context) {
     }
 
     private fun machineIdFile(fujinetRoot: File) = File(File(fujinetRoot, "openmsx"), "machine.id")
+
+    /** Identifies the current install: changes on every (re)install, not on relaunch. */
+    private fun installStamp(): String =
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+        }.getOrDefault("0")
 
     private fun copyAssetDir(assetPath: String, dest: File) {
         val assets: AssetManager = context.assets

@@ -221,6 +221,15 @@ end-to-end path.
   can't run on the host ("Exec format error"). All ABIs rebuilt; on-device the new
   config ROM boots, connects over BoIP :1986 (ESTABLISHED), and the keyboard drives
   it (c -> Configuration).
+- **Re-stage the openMSX runtime tree on every (re)install** (`RuntimeInstaller`):
+  previously the bundled openMSX share tree (C-BIOS ROMs, machine configs, the
+  FujiNet extension + `fujinet-config.rom`) was only copied into `<files>` when
+  `init.tcl` was missing, so an updated asset -- e.g. a new `fujinet-config.rom` --
+  never took effect on `install -r` (which preserves `<files>`); you had to wipe app
+  data. It now keys the re-stage on the package's install/update time (changes on
+  every reinstall, not on a plain relaunch), so updated assets apply automatically
+  while the user's hosts/config/imported SD media (the `fujinet` tree, still gated on
+  `fnconfig.ini`) survive the update.
 
 ### Verified
 - openMSX + FujiNet cross-compile and link for all three packaged ABIs
