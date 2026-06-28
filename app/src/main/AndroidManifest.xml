@@ -8,10 +8,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!--
+      Android TV. We don't require the Leanback UI library or a touchscreen, so the
+      same APK installs on phones, tablets, and TVs. Declaring leanback (optional)
+      plus a LEANBACK_LAUNCHER intent-filter gets the app a tile in the TV home
+      launcher; touchscreen=false keeps it eligible on TVs (which have none).
+    -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:appCategory="game"
         android:isGame="true"
+        android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
@@ -28,6 +38,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <!-- TV home launcher tile (uses android:banner above). -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
 

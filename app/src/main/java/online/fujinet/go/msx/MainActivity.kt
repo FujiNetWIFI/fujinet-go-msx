@@ -115,15 +115,23 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (::session.isInitialized && gamepad.onKey(event)) return true
-        if (::session.isInitialized && routeHardwareKey(event)) return true
+        if (::session.isInitialized) {
+            // Game controller first, then a hardware keyboard. A TV remote's D-pad is
+            // claimed by neither, so it falls through to Compose focus navigation.
+            if (gamepad.onKey(event)) return true
+            if (routeHardwareKey(event)) return true
+        }
         return super.dispatchKeyEvent(event)
     }
 
     /** Route a physical keyboard key to the emulated MSX via [MsxKeyMapper]. */
     private fun routeHardwareKey(event: KeyEvent): Boolean {
-        val isKeyboard = (event.source and InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD
-        if (!isKeyboard || event.keyCode == KeyEvent.KEYCODE_BACK) return false
+        if (!event.isFromPhysicalKeyboard()) return false
+        // The D-pad cluster (arrows + OK) drives Compose focus navigation of the
+        // on-screen keyboard, never the MSX, so a TV remote keeps working. (Many TV
+        // remotes enumerate as alphabetic keyboards, so the keycode is the reliable
+        // signal; use the on-screen arrow keys to send arrows to the MSX.)
+        if (isDpadNavigation(event)) return false
         val mapped = MsxKeyMapper.map(event) ?: return false
         when (event.action) {
             KeyEvent.ACTION_DOWN -> session.keyDown(mapped.keysym, mapped.character, mapped.mods)
@@ -131,6 +139,28 @@ class MainActivity : ComponentActivity() {
             else -> return false
         }
         return true
+    }
+
+    private fun KeyEvent.isFromPhysicalKeyboard(): Boolean {
+        val d = device ?: return false
+        return !d.isVirtual &&
+            d.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC &&
+            source and InputDevice.SOURCE_KEYBOARD == InputDevice.SOURCE_KEYBOARD
+    }
+
+    /**
+     * The keys that must navigate/activate the on-screen keyboard rather than type
+     * into the MSX. Arrows and DPAD_CENTER are always reserved; a remote's "OK" can
+     * arrive as ENTER carrying a D-pad source, whereas a typing keyboard's Enter does
+     * not -- so keyboard Enter still reaches the MSX as RETURN.
+     */
+    private fun isDpadNavigation(event: KeyEvent): Boolean = when (event.keyCode) {
+        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+        KeyEvent.KEYCODE_DPAD_CENTER -> true
+        KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER ->
+            event.source and InputDevice.SOURCE_DPAD == InputDevice.SOURCE_DPAD
+        else -> false
     }
 
     // No session.stop() here: the foreground service owns the session's lifetime

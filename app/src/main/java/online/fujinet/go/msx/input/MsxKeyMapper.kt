@@ -18,7 +18,7 @@ object MsxKeyMapper {
     fun map(event: KeyEvent): Mapped? {
         val mods = modsOf(event)
 
-        named(event.keyCode)?.let { keysym ->
+        specialKeysym(event.keyCode)?.let { keysym ->
             return Mapped(keysym, characterFor(keysym), mods)
         }
 
@@ -39,17 +39,19 @@ object MsxKeyMapper {
         else -> 0
     }
 
-    private fun named(keyCode: Int): Int? = when (keyCode) {
+    /**
+     * Map the Android keycodes for non-printable / named keys to their SDL keysym.
+     * Pure (no [KeyEvent] instance) so it can be unit-tested. The cursor keys are
+     * intentionally absent: they navigate the on-screen keyboard (MainActivity
+     * reserves the D-pad cluster); use the on-screen arrow keys to move the MSX cursor.
+     */
+    internal fun specialKeysym(keyCode: Int): Int? = when (keyCode) {
         KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> Msx.K_RETURN
         KeyEvent.KEYCODE_DEL -> Msx.K_BACKSPACE
         KeyEvent.KEYCODE_FORWARD_DEL -> Msx.K_DELETE
         KeyEvent.KEYCODE_TAB -> Msx.K_TAB
         KeyEvent.KEYCODE_ESCAPE -> Msx.K_ESCAPE
         KeyEvent.KEYCODE_SPACE -> Msx.K_SPACE
-        KeyEvent.KEYCODE_DPAD_UP -> Msx.K_UP
-        KeyEvent.KEYCODE_DPAD_DOWN -> Msx.K_DOWN
-        KeyEvent.KEYCODE_DPAD_LEFT -> Msx.K_LEFT
-        KeyEvent.KEYCODE_DPAD_RIGHT -> Msx.K_RIGHT
         KeyEvent.KEYCODE_MOVE_HOME -> Msx.K_HOME
         KeyEvent.KEYCODE_INSERT -> Msx.K_INSERT
         KeyEvent.KEYCODE_F1 -> Msx.K_F1

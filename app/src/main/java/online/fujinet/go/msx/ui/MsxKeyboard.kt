@@ -2,8 +2,12 @@ package online.fujinet.go.msx.ui
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key as ComposeKey
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +52,7 @@ private val KeyBg = Color(0xFF2B2B2B)        // charcoal keycap
 private val KeyText = Color(0xFFF2871E)      // FS-A1 amber-orange legend
 private val KeyActiveCap = Color(0xFFF2871E) // lit modifier: inverted
 private val KeyActiveText = Color(0xFF161616)
+private val FocusAmber = Color(0xFFFFC107)   // D-pad / TV-remote focused key
 
 /**
  * One printable key. [face] is the unshifted legend; [shiftFace] the shifted
@@ -276,11 +287,30 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
     // coroutine survives a label change mid-press.
     val downHandler by rememberUpdatedState(onDown)
     val upHandler by rememberUpdatedState(onUp)
+    // KeyCap uses pointerInput (a one-tap press/release), which isn't focusable on
+    // its own, so on a TV the D-pad couldn't reach it. Make it focusable, fire the
+    // same one-tap on OK (DPAD_CENTER/Enter), and show a bright amber + white-outline
+    // highlight so the focused key reads clearly from across the room.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(6.dp)
     Box(
         modifier = modifier
             .height(if (compactKeyboard()) 28.dp else 46.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(KeyBg)
+            .clip(shape)
+            .background(if (focused) FocusAmber else KeyBg)
+            .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
+            .focusable(interactionSource = interaction)
+            .onKeyEvent { ev ->
+                if (ev.key == ComposeKey.DirectionCenter || ev.key == ComposeKey.Enter ||
+                    ev.key == ComposeKey.NumPadEnter
+                ) {
+                    if (ev.type == KeyEventType.KeyUp) upHandler(downHandler())
+                    true
+                } else {
+                    false
+                }
+            }
             // Key on [keyId] (stable per key), NOT [label]: SHIFT/GRAPH/KANA change a
             // key's label, and keying on it would restart pointerInput and cancel the
             // in-flight gesture before touch-up -- leaving the key stuck down (endless
@@ -308,7 +338,13 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = KeyText, fontSize = if (compactKeyboard()) 11.sp else 13.sp, textAlign = TextAlign.Center, maxLines = 1)
+        Text(
+            label,
+            color = if (focused) Color.Black else KeyText,
+            fontSize = if (compactKeyboard()) 11.sp else 13.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
 }
 
@@ -316,18 +352,33 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
 private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     // A Box (not a Material Button, whose 40dp minimum height blocks the compact
     // TV layout), styled to match KeyCap with the FS-A1 inverted "lit" state.
+    // clickable is already D-pad-focusable; add the bright focus highlight too.
     val compact = compactKeyboard()
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(6.dp)
+    val cap = when {
+        focused -> FocusAmber
+        active -> KeyActiveCap
+        else -> KeyBg
+    }
+    val txt = when {
+        focused -> Color.Black
+        active -> KeyActiveText
+        else -> KeyText
+    }
     Box(
         modifier = modifier
             .height(if (compact) 28.dp else 46.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (active) KeyActiveCap else KeyBg)
-            .clickable { onClick() },
+            .clip(shape)
+            .background(cap)
+            .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
+            .clickable(interactionSource = interaction, indication = ripple()) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = if (active) KeyActiveText else KeyText,
+            color = txt,
             fontSize = if (compact) 10.sp else 11.sp,
             textAlign = TextAlign.Center,
             maxLines = 1,
