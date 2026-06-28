@@ -432,6 +432,27 @@ patch("lib/FileSystem/fnFsSPIFFS.cpp", [
     ),
 ])
 
+# --- mgHttpClient: absolute CA bundle path (Android in-process) ------------
+# The HTTP client loads its trusted-CA store from the relative "data/ca.pem"
+# fallback (Android has no /etc/ssl/certs/ca-certificates.crt). That path only
+# resolves while the CWD is the runtime root, but the shared-process emulator
+# moves the CWD after startup (openMSX's chdir), so the load silently fails and
+# the CA store ends up empty. With an empty store mongoose's mbedTLS path takes
+# its VERIFY_NONE branch, which skips mbedtls_ssl_set_hostname() -- so no SNI is
+# sent, and SNI-only hosts reject the ClientHello with a fatal handshake_failure
+# alert (mbedTLS -0x7780). Root the bundle absolutely from FUJINET_RUNTIME_ROOT,
+# mirroring the fnFsSPIFFS patch above.
+patch("lib/http/mgHttpClient.cpp", [
+    (
+        '        tempCa = mg_file_read(&mg_fs_posix, "data/ca.pem");',
+        '        const char *fn_root = getenv("FUJINET_RUNTIME_ROOT");\n'
+        '        std::string ca_path = (fn_root && *fn_root)\n'
+        '            ? std::string(fn_root) + "/data/ca.pem"\n'
+        '            : std::string("data/ca.pem");\n'
+        '        tempCa = mg_file_read(&mg_fs_posix, ca_path.c_str());',
+    ),
+])
+
 # --- pc_rtos task shim: name worker threads after their FreeRTOS task ------
 # Cosmetic only: names each detached worker so a native tombstone identifies the
 # failing task. fujinet-pc-apple2 may not ship this PC FreeRTOS shim (the APPLE
