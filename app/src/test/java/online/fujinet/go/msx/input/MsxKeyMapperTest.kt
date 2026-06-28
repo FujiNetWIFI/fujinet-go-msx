@@ -29,13 +29,15 @@ class MsxKeyMapperTest {
     }
 
     @Test
-    fun cursorAndUnknownKeysAreNotForwarded() {
-        // The cursor cluster drives on-screen-keyboard focus (TV remote); use the
-        // on-screen arrow keys to move the MSX cursor.
-        assertNull(MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_LEFT))
-        assertNull(MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_RIGHT))
-        assertNull(MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_UP))
-        assertNull(MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_DOWN))
+    fun cursorKeysMapAndUnknownKeysAreNotForwarded() {
+        // Cursor keys typed on a keyboard reach the MSX (e.g. the FujiNet CONFIG
+        // selection bar). MainActivity's isDpadNavigation() routes a TV remote's D-pad
+        // (SOURCE_DPAD) to focus navigation before this keycode lookup is consulted.
+        assertEquals(Msx.K_LEFT, MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_LEFT))
+        assertEquals(Msx.K_RIGHT, MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(Msx.K_UP, MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_UP))
+        assertEquals(Msx.K_DOWN, MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_DOWN))
+        // DPAD_CENTER has no MSX equivalent; unknown keys aren't forwarded either.
         assertNull(MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_DPAD_CENTER))
         assertNull(MsxKeyMapper.specialKeysym(KeyEvent.KEYCODE_VOLUME_UP))
     }

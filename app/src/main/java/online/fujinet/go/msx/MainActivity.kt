@@ -127,10 +127,11 @@ class MainActivity : ComponentActivity() {
     /** Route a physical keyboard key to the emulated MSX via [MsxKeyMapper]. */
     private fun routeHardwareKey(event: KeyEvent): Boolean {
         if (!event.isFromPhysicalKeyboard()) return false
-        // The D-pad cluster (arrows + OK) drives Compose focus navigation of the
-        // on-screen keyboard, never the MSX, so a TV remote keeps working. (Many TV
-        // remotes enumerate as alphabetic keyboards, so the keycode is the reliable
-        // signal; use the on-screen arrow keys to send arrows to the MSX.)
+        // A D-pad cluster event drives Compose focus navigation only when it comes from
+        // a real D-pad device (a TV remote / gamepad, marked SOURCE_DPAD); see
+        // isDpadNavigation(). Arrow keys typed on an attached keyboard carry no
+        // SOURCE_DPAD, so they fall through and reach the MSX (e.g. the FujiNet CONFIG
+        // selection bar).
         if (isDpadNavigation(event)) return false
         val mapped = MsxKeyMapper.map(event) ?: return false
         when (event.action) {
@@ -149,15 +150,17 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The keys that must navigate/activate the on-screen keyboard rather than type
-     * into the MSX. Arrows and DPAD_CENTER are always reserved; a remote's "OK" can
-     * arrive as ENTER carrying a D-pad source, whereas a typing keyboard's Enter does
-     * not -- so keyboard Enter still reaches the MSX as RETURN.
+     * The keys that must navigate/activate the on-screen keyboard rather than type into
+     * the MSX. The D-pad cluster (arrows, DPAD_CENTER) and a remote's "OK"/ENTER are
+     * reserved only when they carry a D-pad source -- i.e. they come from a TV remote or
+     * gamepad. A typing keyboard's arrows and Enter carry no SOURCE_DPAD, so they fall
+     * through and reach the MSX (arrows as cursor keysyms, Enter as RETURN) -- e.g. to
+     * drive the FujiNet CONFIG selection bar.
      */
     private fun isDpadNavigation(event: KeyEvent): Boolean = when (event.keyCode) {
         KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
         KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-        KeyEvent.KEYCODE_DPAD_CENTER -> true
+        KeyEvent.KEYCODE_DPAD_CENTER,
         KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER ->
             event.source and InputDevice.SOURCE_DPAD == InputDevice.SOURCE_DPAD
         else -> false

@@ -41,9 +41,7 @@ object MsxKeyMapper {
 
     /**
      * Map the Android keycodes for non-printable / named keys to their SDL keysym.
-     * Pure (no [KeyEvent] instance) so it can be unit-tested. The cursor keys are
-     * intentionally absent: they navigate the on-screen keyboard (MainActivity
-     * reserves the D-pad cluster); use the on-screen arrow keys to move the MSX cursor.
+     * Pure (no [KeyEvent] instance) so it can be unit-tested.
      */
     internal fun specialKeysym(keyCode: Int): Int? = when (keyCode) {
         KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> Msx.K_RETURN
@@ -61,6 +59,13 @@ object MsxKeyMapper {
         KeyEvent.KEYCODE_F5 -> Msx.K_F5
         KeyEvent.KEYCODE_CAPS_LOCK -> Msx.K_CAPS
         KeyEvent.KEYCODE_BREAK -> Msx.K_STOP
+        // Cursor keys reach this table only for events MainActivity's isDpadNavigation()
+        // let through, i.e. typed on a keyboard rather than a TV remote / gamepad D-pad.
+        // DPAD_CENTER has no MSX equivalent, so it is never forwarded.
+        KeyEvent.KEYCODE_DPAD_UP -> Msx.K_UP
+        KeyEvent.KEYCODE_DPAD_DOWN -> Msx.K_DOWN
+        KeyEvent.KEYCODE_DPAD_LEFT -> Msx.K_LEFT
+        KeyEvent.KEYCODE_DPAD_RIGHT -> Msx.K_RIGHT
         else -> null
     }
 
