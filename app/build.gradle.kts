@@ -121,8 +121,8 @@ android {
         applicationId = "online.fujinet.go.msx"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4 
-        versionName = "0.6.0"
+        versionCode = 5 
+        versionName = "0.6.1"
         buildConfigField("String", "OPENMSX_VERSION", "\"${openMsxVersion}\"")
         buildConfigField("String", "FUJINET_RUNTIME_VERSION", "\"${fujiNetRuntimeVersion}\"")
 
