@@ -42,6 +42,15 @@ class EmulatorSessionService : Service() {
             SessionController.get(applicationContext).stop()
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
+            // "Power off" must fully end the app, not just stop the session: the
+            // SessionController singleton and the native emulator core live in
+            // this process, and the core isn't guaranteed to re-initialise
+            // cleanly in-process (a relaunch could resume stale machine state
+            // instead of cold-booting). End the process here so the next launch
+            // cold-boots in a pristine process. Safe after stopSelf() +
+            // START_NOT_STICKY: the system won't resurrect the now-stopped
+            // foreground service.
+            android.os.Process.killProcess(android.os.Process.myPid())
             return START_NOT_STICKY
         }
         return START_STICKY
