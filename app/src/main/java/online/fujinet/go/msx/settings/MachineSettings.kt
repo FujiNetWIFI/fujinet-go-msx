@@ -6,16 +6,24 @@ package online.fujinet.go.msx.settings
  * and to a real-machine openMSX config id used when a profile supplies imported
  * system ROMs. C-BIOS covers MSX1/MSX2/MSX2+; MSX turboR has no C-BIOS, so it
  * always uses a real-machine config and requires imported ROMs to boot.
+ *
+ * The MSX1/MSX2/MSX2+ "real machine" ids are synthesised at boot by
+ * [ImportedMachineConfig] from whatever ROMs the user imported (see that class
+ * for why a fixed Boosted_* config can't consume arbitrary imported ROMs).
+ * turboR keeps a bundled real-machine config as its fallback.
+ *
+ * [openMsxType] is the <type> the generated config declares (MSX / MSX2 / MSX2+).
  */
 enum class MsxSystemType(
     val displayName: String,
     val cbiosMachineId: String?,
     val realMachineId: String,
+    val openMsxType: String,
 ) {
-    MSX("MSX (MSX1)", "C-BIOS_MSX1", "Boosted_MSX2_EN"),
-    MSX2("MSX2", "C-BIOS_MSX2", "Boosted_MSX2_EN"),
-    MSX2_PLUS("MSX2+", "C-BIOS_MSX2+", "Boosted_MSX2+_JP"),
-    TURBO_R("MSX turboR", null, "Boosted_MSXturboR_with_IDE"),
+    MSX("MSX (MSX1)", "C-BIOS_MSX1", "Imported_MSX1", "MSX"),
+    MSX2("MSX2", "C-BIOS_MSX2", "Imported_MSX2", "MSX2"),
+    MSX2_PLUS("MSX2+", "C-BIOS_MSX2+", "Imported_MSX2P", "MSX2+"),
+    TURBO_R("MSX turboR", null, "Boosted_MSXturboR_with_IDE", "MSXturboR"),
 }
 
 /** Kinds of system ROM a profile can import (mapped to openMSX machine ROM slots). */

@@ -7,7 +7,9 @@ import android.util.Log
 import android.view.Surface
 import online.fujinet.go.msx.core.EmulatorNative
 import online.fujinet.go.msx.input.Msx
+import online.fujinet.go.msx.settings.ImportedMachineConfig
 import online.fujinet.go.msx.settings.MachineProfileStore
+import online.fujinet.go.msx.settings.SystemRomStore
 import kotlin.concurrent.thread
 
 /**
@@ -65,8 +67,15 @@ class SessionController private constructor(private val context: Context) {
             val installer = RuntimeInstaller(context.applicationContext)
             val p = paths ?: installer.install().also { paths = it }
             // Boot the machine the active profile selects (system type / imported
-            // ROMs); session_runtime reads this before starting the core.
-            installer.writeMachineId(MachineProfileStore(context.applicationContext).activeMachineId())
+            // ROMs); session_runtime reads this before starting the core. When the
+            // profile boots imported ROMs, ImportedMachineConfig synthesises the
+            // matching machine config from the imported files first (and falls back
+            // to C-BIOS if no BIOS was imported).
+            val app = context.applicationContext
+            val profile = MachineProfileStore(app).activeProfile()
+            val machineId = ImportedMachineConfig(app)
+                .resolveMachineId(profile, SystemRomStore(app).load())
+            installer.writeMachineId(machineId)
             ensureSdl()
             EmulatorNative.nativeStartSession(p.runtimeRoot, p.configPath, p.sdPath, p.dataPath)
             audio.start()
