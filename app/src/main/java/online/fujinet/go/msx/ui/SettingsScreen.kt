@@ -4,12 +4,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import online.fujinet.go.msx.SessionController
 import online.fujinet.go.msx.settings.MsxSystemType
 import online.fujinet.go.msx.settings.SystemTypeStore
 
@@ -39,6 +43,11 @@ fun SettingsScreen(
     val context = LocalContext.current
     val store = remember { SystemTypeStore(context) }
     var systemType by remember { mutableStateOf(store.load()) }
+    // Haptics persist live (no restart): toggling writes straight through to the
+    // shared session, so even closing without "Apply & Restart" keeps the change.
+    val session = remember { SessionController.get(context) }
+    var keyboardHaptics by remember { mutableStateOf(session.keyboardHapticsEnabled) }
+    var joystickHaptics by remember { mutableStateOf(session.joystickHapticsEnabled) }
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -69,7 +78,34 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Haptics", style = MaterialTheme.typography.titleSmall)
+                ToggleRow("Keyboard haptics", keyboardHaptics) {
+                    keyboardHaptics = it
+                    session.keyboardHapticsEnabled = it
+                }
+                ToggleRow("Joystick haptics", joystickHaptics) {
+                    joystickHaptics = it
+                    session.joystickHapticsEnabled = it
+                }
             }
         },
     )
+}
+
+@Composable
+private fun ToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
 }

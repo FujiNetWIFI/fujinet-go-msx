@@ -28,6 +28,17 @@ class SessionController private constructor(private val context: Context) {
     private val audio = AudioOutput()
     private val lock = Any()
 
+    private val prefs = context.getSharedPreferences("fujimsx", Context.MODE_PRIVATE)
+
+    /** Live haptic-feedback toggles (persisted; no session restart). */
+    var keyboardHapticsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_KEYBOARD_HAPTICS, true)
+        set(value) { prefs.edit().putBoolean(KEY_KEYBOARD_HAPTICS, value).apply() }
+
+    var joystickHapticsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_JOYSTICK_HAPTICS, true)
+        set(value) { prefs.edit().putBoolean(KEY_JOYSTICK_HAPTICS, value).apply() }
+
     /**
      * openMSX is an SDL app; SDL's Android audio/video drivers need their JNI
      * references set up (normally done by SDLActivity). Touch EmulatorNative first
@@ -194,6 +205,8 @@ class SessionController private constructor(private val context: Context) {
     companion object {
         @Volatile private var instance: SessionController? = null
         private const val KEY_HOLD_MS = 80L
+        private const val KEY_KEYBOARD_HAPTICS = "keyboardHaptics"
+        private const val KEY_JOYSTICK_HAPTICS = "joystickHaptics"
 
         fun get(context: Context): SessionController =
             instance ?: synchronized(this) {

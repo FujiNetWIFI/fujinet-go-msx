@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import online.fujinet.go.msx.R
 import online.fujinet.go.msx.SessionController
 
@@ -54,6 +58,22 @@ fun EmulatorScreen(
     // is shown so the emulator surface keeps as much room as possible.
     var overlay by remember { mutableStateOf(Overlay.KEYBOARD) }
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    // Haptics are toggled in the separate SettingsActivity; re-read them whenever we
+    // resume so a change there takes effect on return without restarting the session.
+    var keyboardHaptics by remember { mutableStateOf(session.keyboardHapticsEnabled) }
+    var joystickHaptics by remember { mutableStateOf(session.joystickHapticsEnabled) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                keyboardHaptics = session.keyboardHapticsEnabled
+                joystickHaptics = session.joystickHapticsEnabled
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         ControlBar(
@@ -77,6 +97,7 @@ fun EmulatorScreen(
                 JoystickPad(
                     onAxis = { x, y -> session.joyStick(x, y) },
                     modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 12.dp),
+                    hapticsEnabled = joystickHaptics,
                 )
                 EmulatorSurface(
                     session = session,
@@ -85,6 +106,7 @@ fun EmulatorScreen(
                 FireButtons(
                     session,
                     modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 12.dp),
+                    hapticsEnabled = joystickHaptics,
                 )
             }
         } else {
@@ -94,8 +116,8 @@ fun EmulatorScreen(
                 EmulatorSurface(session = session, modifier = Modifier.fillMaxSize())
             }
             when (overlay) {
-                Overlay.KEYBOARD -> MsxKeyboard(session = session)
-                Overlay.JOYSTICK -> JoystickView(session = session)
+                Overlay.KEYBOARD -> MsxKeyboard(session = session, hapticsEnabled = keyboardHaptics)
+                Overlay.JOYSTICK -> JoystickView(session = session, hapticsEnabled = joystickHaptics)
                 Overlay.NONE -> {}
             }
         }

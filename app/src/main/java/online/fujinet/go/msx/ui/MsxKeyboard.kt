@@ -19,11 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -131,13 +133,16 @@ private val ROW4 =
  * character (rather than us guessing the codepoint).
  */
 @Composable
-fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
+fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapticsEnabled: Boolean = true) {
     var shift by remember { mutableStateOf(false) }
     var ctrl by remember { mutableStateOf(false) }
     var graph by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf(false) }
     var caps by remember { mutableStateOf(false) }
     var kana by remember { mutableStateOf(false) }
+
+    val emitHaptic = rememberFujiHaptic(FujiHapticPattern.KeyPress)
+    val onHaptic = { if (hapticsEnabled) emitHaptic() }
 
     fun clearOneShot() { shift = false; ctrl = false; graph = false; code = false }
 
@@ -207,6 +212,10 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
         else -> if (k.code in Msx.K_a..Msx.K_z && !caps) k.face.lowercase() else k.face
     }
 
+    // Every keycap routes its gesture through KeyCap/ModKey; rather than thread an
+    // onHaptic through all the call sites, expose the gated pulse via a CompositionLocal
+    // that those composables read and fire on press.
+    CompositionLocalProvider(LocalKeyHaptic provides onHaptic) {
     Column(
         modifier = modifier.fillMaxWidth().padding(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -270,7 +279,11 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier) {
             KeyCap("→", Msx.K_RIGHT, Modifier.weight(1f), onDown = { pressSpecial(Msx.K_RIGHT, false) }, onUp = { releaseChord(it) })
         }
     }
+    }
 }
+
+/** The gated key-press haptic pulse, supplied by [MsxKeyboard] and fired by each key. */
+private val LocalKeyHaptic = staticCompositionLocalOf<() -> Unit> { {} }
 
 /**
  * A momentary keycap: presses on touch-down and releases on touch-up, so the
@@ -294,6 +307,9 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(6.dp)
+    // Read live (the gesture's pointerInput is keyed on the stable keyId and won't
+    // restart), so toggling haptics takes effect without re-showing the keyboard.
+    val haptic by rememberUpdatedState(LocalKeyHaptic.current)
     Box(
         modifier = modifier
             .height(if (compactKeyboard()) 28.dp else 46.dp)
@@ -305,7 +321,7 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
                 if (ev.key == ComposeKey.DirectionCenter || ev.key == ComposeKey.Enter ||
                     ev.key == ComposeKey.NumPadEnter
                 ) {
-                    if (ev.type == KeyEventType.KeyUp) upHandler(downHandler())
+                    if (ev.type == KeyEventType.KeyUp) { haptic(); upHandler(downHandler()) }
                     true
                 } else {
                     false
@@ -320,6 +336,7 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
                     val now = System.currentTimeMillis()
                     if (now - lastDownMs[0] >= KEY_DEBOUNCE_MS) {
                         lastDownMs[0] = now
+                        haptic()
                         // Inject press + release back-to-back, regardless of how long the
                         // finger rests on the key. openMSX's (re-enabled) touch-keyboard
                         // release-delay in EventDelay correlates the two and holds the
@@ -357,6 +374,7 @@ private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(6.dp)
+    val haptic = LocalKeyHaptic.current
     val cap = when {
         focused -> FocusAmber
         active -> KeyActiveCap
@@ -373,7 +391,7 @@ private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier
             .clip(shape)
             .background(cap)
             .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
-            .clickable(interactionSource = interaction, indication = ripple()) { onClick() },
+            .clickable(interactionSource = interaction, indication = ripple()) { haptic(); onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Text(

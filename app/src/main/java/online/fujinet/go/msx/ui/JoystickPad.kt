@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -47,14 +48,14 @@ import kotlin.math.roundToInt
  * the four direction bits (SessionController.joyStick) for port 1.
  */
 @Composable
-fun JoystickView(session: SessionController, modifier: Modifier = Modifier) {
+fun JoystickView(session: SessionController, modifier: Modifier = Modifier, hapticsEnabled: Boolean = true) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        JoystickPad(onAxis = { x, y -> session.joyStick(x, y) })
-        FireButtons(session)
+        JoystickPad(onAxis = { x, y -> session.joyStick(x, y) }, hapticsEnabled = hapticsEnabled)
+        FireButtons(session, hapticsEnabled = hapticsEnabled)
     }
 }
 
@@ -65,14 +66,24 @@ fun JoystickView(session: SessionController, modifier: Modifier = Modifier) {
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun JoystickPad(onAxis: (Float, Float) -> Unit, modifier: Modifier = Modifier, size: Dp = 150.dp) {
+fun JoystickPad(
+    onAxis: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 150.dp,
+    hapticsEnabled: Boolean = true,
+) {
     var padSize by remember { mutableStateOf(IntSize.Zero) }
     var nub by remember { mutableStateOf(PointF(0f, 0f)) }
     var pointerId by remember { mutableStateOf<Int?>(null) }
+    // Last 8-way zone the stick was in, so we can tick once each time it enters a
+    // new direction -- a switch-like detent feel matching the MSX digital joystick.
+    val lastDir = remember { intArrayOf(0) }
+    val emit = rememberFujiHaptic(FujiHapticPattern.JoystickTick)
 
     fun reset() {
         pointerId = null
         nub = PointF(0f, 0f)
+        lastDir[0] = 0
         onAxis(0f, 0f)
     }
 
@@ -80,6 +91,9 @@ fun JoystickPad(onAxis: (Float, Float) -> Unit, modifier: Modifier = Modifier, s
         val ax = axis(px, padSize.width)
         val ay = axis(py, padSize.height)
         nub = PointF(ax, ay)
+        val dir = directionCode(ax, ay)
+        if (hapticsEnabled && dir != 0 && dir != lastDir[0]) emit()
+        lastDir[0] = dir
         onAxis(ax, ay)
     }
 
@@ -141,19 +155,30 @@ fun JoystickPad(onAxis: (Float, Float) -> Unit, modifier: Modifier = Modifier, s
 
 /** The two MSX joystick fire buttons: trigger A (primary) and trigger B. */
 @Composable
-fun FireButtons(session: SessionController, modifier: Modifier = Modifier) {
+fun FireButtons(session: SessionController, modifier: Modifier = Modifier, hapticsEnabled: Boolean = true) {
+    val emit = rememberFujiHaptic(FujiHapticPattern.KeyPress)
+    val onHaptic = { if (hapticsEnabled) emit() }
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        FireButton("●", "A") { down -> session.joyButton(Msx.JOY_TRIG_A, down) }
-        FireButton("○", "B") { down -> session.joyButton(Msx.JOY_TRIG_B, down) }
+        FireButton("●", "A", onHaptic = onHaptic) { down -> session.joyButton(Msx.JOY_TRIG_A, down) }
+        FireButton("○", "B", onHaptic = onHaptic) { down -> session.joyButton(Msx.JOY_TRIG_B, down) }
     }
 }
 
 @Composable
-private fun FireButton(symbol: String, caption: String, size: Dp = 64.dp, onHold: (Boolean) -> Unit) {
+private fun FireButton(
+    symbol: String,
+    caption: String,
+    size: Dp = 64.dp,
+    onHaptic: () -> Unit = {},
+    onHold: (Boolean) -> Unit,
+) {
+    // Keyed on Unit so an unrelated recomposition never restarts the gesture (which
+    // would release the held button mid-press); the latest haptic is read via State.
+    val currentHaptic = rememberUpdatedState(onHaptic)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -162,6 +187,7 @@ private fun FireButton(symbol: String, caption: String, size: Dp = 64.dp, onHold
                 .background(MaterialTheme.colorScheme.primary)
                 .pointerInput(Unit) {
                     detectTapGestures(onPress = {
+                        currentHaptic.value()
                         onHold(true)
                         try {
                             awaitRelease()
@@ -180,6 +206,10 @@ private fun FireButton(symbol: String, caption: String, size: Dp = 64.dp, onHold
 
 private const val DEADZONE = 0.12f
 
+// Stick deflection past which a direction "engages" for the haptic detent tick.
+// Higher than DEADZONE so a tick fires only on a deliberate push, not tiny drift.
+private const val DIR_THRESHOLD = 0.5f
+
 /** Normalize a touch coordinate within [extent] to -1..1 with a centre deadzone. */
 private fun axis(value: Float, extent: Int): Float {
     if (extent == 0) return 0f
@@ -187,3 +217,8 @@ private fun axis(value: Float, extent: Int): Float {
     val n = ((value - half) / half).coerceIn(-1f, 1f)
     return if (abs(n) < DEADZONE) 0f else n
 }
+
+/** A 4-bit up/down/left/right code for the stick's current 8-way zone (0 = centred). */
+private fun directionCode(ax: Float, ay: Float): Int =
+    (if (ay <= -DIR_THRESHOLD) 1 else 0) or (if (ay >= DIR_THRESHOLD) 2 else 0) or
+        (if (ax <= -DIR_THRESHOLD) 4 else 0) or (if (ax >= DIR_THRESHOLD) 8 else 0)
