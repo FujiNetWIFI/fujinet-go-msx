@@ -54,7 +54,7 @@ class RuntimeInstaller(private val context: Context) {
             runCatching { stampFile.writeText(installStamp) }
         }
         // The session reads the chosen machine from <fujinet>/openmsx/machine.id;
-        // default until the Settings layer writes the active profile selection.
+        // default until the Settings layer writes the selected system type.
         if (!machineIdFile(fujinetRoot).exists()) writeMachineId(DEFAULT_MACHINE)
 
         return Paths(

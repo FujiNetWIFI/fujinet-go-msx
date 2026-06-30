@@ -62,6 +62,7 @@
             android:name=".SettingsActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false"
-            android:label="Settings" />
+            android:label="Settings"
+            android:theme="@style/Theme.FujiNetGoMsx.Settings" />
     </application>
 </manifest>
