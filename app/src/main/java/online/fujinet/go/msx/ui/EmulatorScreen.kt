@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,7 +38,7 @@ import online.fujinet.go.msx.SessionController
 
 /**
  * The main app screen: the MSX video surface, a thin control bar (toggle
- * keyboard / joystick, reset, open the FujiNet web UI, settings, shut down), and
+ * keyboard / joystick, open the FujiNet web UI, settings, shut down), and
  * the on-screen keyboard. Mirrors the other FujiNet Go targets' EmulatorScreen,
  * MSX-ised.
  */
@@ -66,7 +65,6 @@ fun EmulatorScreen(
             onToggleJoystick = {
                 overlay = if (overlay == Overlay.JOYSTICK) Overlay.NONE else Overlay.JOYSTICK
             },
-            onReset = session::reset,
             onOpenFujiNet = onOpenFujiNet,
             onOpenSettings = onOpenSettings,
             onShutdown = onShutdown,
@@ -112,7 +110,6 @@ private fun ControlBar(
     joystickActive: Boolean,
     onToggleKeyboard: () -> Unit,
     onToggleJoystick: () -> Unit,
-    onReset: () -> Unit,
     onOpenFujiNet: () -> Unit,
     onOpenSettings: () -> Unit,
     onShutdown: () -> Unit,
@@ -125,7 +122,6 @@ private fun ControlBar(
     ) {
         BarButton(Icons.Filled.Keyboard, "Keyboard", Modifier.weight(1f), keyboardActive, onToggleKeyboard)
         BarButton(Icons.Filled.Gamepad, "Joystick", Modifier.weight(1f), joystickActive, onToggleJoystick)
-        BarButton(Icons.Filled.RestartAlt, "Reset", Modifier.weight(1f), onClick = onReset)
         FujiNetBarButton(Modifier.weight(1f), onClick = onOpenFujiNet)
         BarButton(Icons.Filled.Settings, "Settings", Modifier.weight(1f), onClick = onOpenSettings)
         BarButton(Icons.Filled.PowerSettingsNew, "Power off", Modifier.weight(1f), onClick = onShutdown)

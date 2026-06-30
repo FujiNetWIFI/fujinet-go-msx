@@ -175,12 +175,17 @@ class SessionController private constructor(private val context: Context) {
         EmulatorNative.nativeSetJoystickAxis(port, Msx.AXIS_Y, axisValue(y))
     }
 
-    /** Set the four direction bits directly (e.g. from a d-pad). */
+    /**
+     * Drive the joystick from four d-pad direction bits (e.g. a game controller).
+     * Opposing directions share one axis on the native side (left/right -> axis 0,
+     * up/down -> axis 1), so we resolve each axis to a single value and forward it
+     * via [joyStick] -- driving them as separate buttons would let the second of a
+     * pair (e.g. right=false) clobber the first (left=true) and swallow the press.
+     */
     fun joyDirection(up: Boolean, down: Boolean, left: Boolean, right: Boolean, port: Int = 0) {
-        joyButton(Msx.JOY_UP, up, port)
-        joyButton(Msx.JOY_DOWN, down, port)
-        joyButton(Msx.JOY_LEFT, left, port)
-        joyButton(Msx.JOY_RIGHT, right, port)
+        val x = (if (right) 1f else 0f) - (if (left) 1f else 0f)
+        val y = (if (down) 1f else 0f) - (if (up) 1f else 0f)
+        joyStick(x, y, port)
     }
 
     private fun axisValue(v: Float): Int =
