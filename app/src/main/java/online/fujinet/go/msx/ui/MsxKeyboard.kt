@@ -10,11 +10,15 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
@@ -38,9 +42,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import online.fujinet.go.msx.SessionController
 import online.fujinet.go.msx.input.Msx
 
@@ -121,50 +126,35 @@ private val ROW4 =
         Key("/", "?", "メ", '/'.code, '/'.code, '?'.code)
 
 /**
- * On-screen MSX2 keyboard modeled on the Panasonic FS-A1: an F1-F5 function row
- * (F6-F10 when SHIFT is lit), the typewriter block, and a modifier row with the
- * cursor diamond.
- *
- * SHIFT / CTRL / GRAPH / CODE are sticky one-shot modifiers (lit until the next
- * key); CAP and かな (KANA) are locks that toggle the MSX caps/kana-lock keys.
- * A lit SHIFT/GRAPH/CAP/KANA also switches the visible keycap legends. Modifiers
- * are injected into openMSX as real matrix key presses around the main key, so
- * the emulated firmware produces the authentic shifted / graphic / katakana
- * character (rather than us guessing the codepoint).
+ * Sticky-modifier state for the MSX keyboard: SHIFT/CTRL/GRAPH/CODE are one-shot
+ * (lit until the next key); CAP and かな (KANA) are locks. Modifiers are injected into
+ * openMSX as real matrix key presses around the main key so the firmware produces the
+ * authentic shifted / graphic / katakana character. Hoisted into a holder -- along with
+ * the press/release chord logic and the legend picker -- so the portrait keyboard and
+ * the split landscape halves share one source of truth (a modifier lit on one flank
+ * applies to a key on the other).
  */
-@Composable
-fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapticsEnabled: Boolean = true) {
-    var shift by remember { mutableStateOf(false) }
-    var ctrl by remember { mutableStateOf(false) }
-    var graph by remember { mutableStateOf(false) }
-    var code by remember { mutableStateOf(false) }
-    var caps by remember { mutableStateOf(false) }
-    var kana by remember { mutableStateOf(false) }
-
-    val emitHaptic = rememberFujiHaptic(FujiHapticPattern.KeyPress)
-    val onHaptic = { if (hapticsEnabled) emitHaptic() }
+private class MsxKeyboardModifiers {
+    var shift by mutableStateOf(false)
+    var ctrl by mutableStateOf(false)
+    var graph by mutableStateOf(false)
+    var code by mutableStateOf(false)
+    var caps by mutableStateOf(false)
+    var kana by mutableStateOf(false)
 
     fun clearOneShot() { shift = false; ctrl = false; graph = false; code = false }
 
     // Each press returns the chord of keysyms it pressed (main key first, then any
-    // injected modifiers); the keycap hands that same chord back on release. This
-    // keeps press/release self-contained per keycap (correct under recomposition
-    // and multi-touch) -- the modifier state is read live from the remembered vars.
+    // injected modifiers); the keycap hands that same chord back on release. This keeps
+    // press/release self-contained per keycap (correct under recomposition and
+    // multi-touch) -- the modifier state is read live from these vars.
 
     // Printable key with the lit modifiers. GRAPH/CODE/KANA/CTRL route through the
     // matrix (unicode 0) with the modifier keys injected as real presses, so the
-    // firmware maps the graphic/katakana glyph. The plain/shift case uses the
-    // unicode codepoint instead -- CHARACTER mapping then yields the exact char and
-    // encodes SHIFT itself, so we must NOT also inject the SHIFT matrix key there.
-    fun pressKey(k: Key): List<Int> {
-        // Replicate the exact SDL event sequence desktop openMSX gets from a real
-        // keyboard. Hold the active modifier key(s) in the matrix first, then the
-        // base key: GRAPH/CODE/KANA/CTRL with unicode 0 (firmware maps the glyph);
-        // plain/SHIFT with the (shifted) unicode + matching KMOD. Crucially, when
-        // SHIFT is lit we inject the real SHIFT key *and* the shifted codepoint -- so
-        // openMSX sees SHIFT already down and just presses the key once. (Sending the
-        // shifted codepoint *without* a held SHIFT made openMSX press/release SHIFT
-        // itself around the key, adding edges -> doubled characters.)
+    // firmware maps the graphic/katakana glyph. The plain/shift case uses the unicode
+    // codepoint instead -- CHARACTER mapping then yields the exact char and encodes
+    // SHIFT itself, so we must NOT also inject the SHIFT matrix key there.
+    fun pressKey(session: SessionController, k: Key): List<Int> {
         val useMatrix = graph || code || kana || ctrl
         val ch = when {
             useMatrix -> 0
@@ -183,9 +173,9 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapti
         return listOf(k.code) + inject
     }
 
-    // Special (non-printable) key, optionally with SHIFT injected so the firmware
-    // sees e.g. SHIFT+F1 = F6 or SHIFT+HOME = CLS.
-    fun pressSpecial(sym: Int, withShift: Boolean): List<Int> {
+    // Special (non-printable) key, optionally with SHIFT injected so the firmware sees
+    // e.g. SHIFT+F1 = F6 or SHIFT+HOME = CLS.
+    fun pressSpecial(session: SessionController, sym: Int, withShift: Boolean): List<Int> {
         val inject = if (withShift && shift) listOf(Msx.K_LSHIFT) else emptyList()
         for (m in inject) session.keyDown(m, 0, 0)
         session.keyDown(sym, 0, if (shift && withShift) Msx.MOD_SHIFT else 0)
@@ -194,11 +184,11 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapti
     }
 
     // A plain key with no modifier handling (SPACE/RET/TAB/BS).
-    fun pressPlain(sym: Int, ascii: Int): List<Int> {
+    fun pressPlain(session: SessionController, sym: Int, ascii: Int): List<Int> {
         session.keyDown(sym, ascii, 0); clearOneShot(); return listOf(sym)
     }
 
-    fun releaseChord(chord: List<Int>) {
+    fun releaseChord(session: SessionController, chord: List<Int>) {
         if (chord.isEmpty()) return
         session.keyUp(chord.first(), 0, 0)                          // main key
         for (m in chord.drop(1).reversed()) session.keyUp(m, 0, 0)  // modifiers
@@ -211,6 +201,36 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapti
         caps && k.code in Msx.K_a..Msx.K_z -> k.face.uppercase()
         else -> if (k.code in Msx.K_a..Msx.K_z && !caps) k.face.lowercase() else k.face
     }
+}
+
+@Composable
+private fun rememberMsxKeyboardModifiers() = remember { MsxKeyboardModifiers() }
+
+/**
+ * On-screen MSX2 keyboard modeled on the Panasonic FS-A1: an F1-F5 function row
+ * (F6-F10 when SHIFT is lit), the typewriter block, and a modifier row with the
+ * cursor diamond.
+ *
+ * SHIFT / CTRL / GRAPH / CODE are sticky one-shot modifiers (lit until the next
+ * key); CAP and かな (KANA) are locks that toggle the MSX caps/kana-lock keys.
+ * A lit SHIFT/GRAPH/CAP/KANA also switches the visible keycap legends.
+ *
+ * Full-width; used in portrait and as the fallback for landscapes too narrow for
+ * [LandscapeSplitKeyboard].
+ */
+@Composable
+fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapticsEnabled: Boolean = true) {
+    val mods = rememberMsxKeyboardModifiers()
+    val shift = mods.shift
+
+    val emitHaptic = rememberFujiHaptic(FujiHapticPattern.KeyPress)
+    val onHaptic = { if (hapticsEnabled) emitHaptic() }
+
+    fun pressKey(k: Key) = mods.pressKey(session, k)
+    fun pressSpecial(sym: Int, withShift: Boolean) = mods.pressSpecial(session, sym, withShift)
+    fun pressPlain(sym: Int, ascii: Int) = mods.pressPlain(session, sym, ascii)
+    fun releaseChord(chord: List<Int>) = mods.releaseChord(session, chord)
+    fun faceOf(k: Key) = mods.faceOf(k)
 
     // Every keycap routes its gesture through KeyCap/ModKey; rather than thread an
     // onHaptic through all the call sites, expose the gated pulse via a CompositionLocal
@@ -249,10 +269,10 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapti
 
         // Modifier row: CTRL / SHIFT / GRAPH / CODE + ESC / SPACE / RET.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            ModKey("CTRL", ctrl, Modifier.weight(1.2f)) { ctrl = !ctrl }
-            ModKey("SHIFT", shift, Modifier.weight(1.2f)) { shift = !shift }
-            ModKey("GRAPH", graph, Modifier.weight(1.3f)) { graph = !graph }
-            ModKey("CODE", code, Modifier.weight(1.2f)) { code = !code }
+            ModKey("CTRL", mods.ctrl, Modifier.weight(1.2f)) { mods.ctrl = !mods.ctrl }
+            ModKey("SHIFT", mods.shift, Modifier.weight(1.2f)) { mods.shift = !mods.shift }
+            ModKey("GRAPH", mods.graph, Modifier.weight(1.3f)) { mods.graph = !mods.graph }
+            ModKey("CODE", mods.code, Modifier.weight(1.2f)) { mods.code = !mods.code }
             KeyCap("ESC", Msx.K_ESCAPE, Modifier.weight(1f),
                 onDown = { pressSpecial(Msx.K_ESCAPE, false) }, onUp = { releaseChord(it) })
             KeyCap("SPACE", Msx.K_SPACE, Modifier.weight(3f),
@@ -265,8 +285,8 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapti
 
         // Bottom: CAP / KANA locks, TAB / BS, HOME (CLS when SHIFT) + cursor diamond.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            ModKey("CAP", caps, Modifier.weight(1f)) { caps = !caps; session.tapKey(Msx.K_CAPS, 0, 0) }
-            ModKey("かな", kana, Modifier.weight(1f)) { kana = !kana; session.tapKey(Msx.K_CODE, 0, 0) }
+            ModKey("CAP", mods.caps, Modifier.weight(1f)) { mods.caps = !mods.caps; session.tapKey(Msx.K_CAPS, 0, 0) }
+            ModKey("かな", mods.kana, Modifier.weight(1f)) { mods.kana = !mods.kana; session.tapKey(Msx.K_CODE, 0, 0) }
             KeyCap("TAB", Msx.K_TAB, Modifier.weight(1f),
                 onDown = { pressPlain(Msx.K_TAB, 9) }, onUp = { releaseChord(it) })
             KeyCap("BS", Msx.K_BACKSPACE, Modifier.weight(1f),
@@ -282,8 +302,157 @@ fun MsxKeyboard(session: SessionController, modifier: Modifier = Modifier, hapti
     }
 }
 
+/** Minimum flank width worth splitting into; below this we keep the stacked keyboard. */
+private val MIN_HALF_WIDTH = 150.dp
+/** Cap so keys don't grow absurdly tall on very tall landscape panels. */
+private val MAX_SPLIT_KEY_HEIGHT = 60.dp
+/** The MSX keyboard has seven rows, stacked to fill each flank. */
+private const val SPLIT_ROWS = 7
+
+/**
+ * Landscape MSX keyboard split into two halves placed in the pillar-box margins beside
+ * the 4:3 picture, so the display keeps full height between them. Both halves share one
+ * [MsxKeyboardModifiers]. Falls back to the stacked [MsxKeyboard] when too narrow.
+ */
+@Composable
+fun LandscapeSplitKeyboard(
+    session: SessionController,
+    modifier: Modifier = Modifier,
+    hapticsEnabled: Boolean = true,
+) {
+    val mods = rememberMsxKeyboardModifiers()
+    val emitHaptic = rememberFujiHaptic(FujiHapticPattern.KeyPress)
+    val onHaptic = { if (hapticsEnabled) emitHaptic() }
+
+    BoxWithConstraints(modifier = modifier.background(Color.Black)) {
+        val sideWidth = (maxWidth - maxHeight * FRAME_RATIO) / 2
+        if (sideWidth < MIN_HALF_WIDTH) {
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    EmulatorSurface(session = session, modifier = Modifier.fillMaxSize())
+                }
+                MsxKeyboard(session = session, hapticsEnabled = hapticsEnabled)
+            }
+        } else {
+            val gap = 2.dp
+            val keyH = ((maxHeight - gap * (SPLIT_ROWS - 1)) / SPLIT_ROWS).coerceAtMost(MAX_SPLIT_KEY_HEIGHT)
+            val font: TextUnit = 14.sp
+            CompositionLocalProvider(
+                LocalKeyHaptic provides onHaptic,
+                LocalKeyHeight provides keyH,
+                LocalKeyFont provides font,
+            ) {
+                Row(Modifier.fillMaxSize()) {
+                    MsxKeyboardHalf(true, mods, session, Modifier.width(sideWidth))
+                    EmulatorSurface(session = session, modifier = Modifier.weight(1f).fillMaxHeight())
+                    MsxKeyboardHalf(false, mods, session, Modifier.width(sideWidth))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One half of the split MSX keyboard: the seven rows stacked to fill the flank. The
+ * typewriter rows (ROW1..ROW4) are sliced down the middle; the function, modifier and
+ * bottom rows are hand-split across the two flanks.
+ */
+@Composable
+private fun MsxKeyboardHalf(
+    left: Boolean,
+    mods: MsxKeyboardModifiers,
+    session: SessionController,
+    modifier: Modifier,
+) {
+    val shift = mods.shift
+    // Slice the typewriter rows at ~half each (ROW1 is 13 keys -> 7/6, the rest even).
+    fun <T> half(list: List<T>): List<T> {
+        val n = (list.size + 1) / 2
+        return if (left) list.take(n) else list.drop(n)
+    }
+    val gap = 2.dp
+    Column(
+        modifier = modifier.padding(2.dp),
+        verticalArrangement = Arrangement.spacedBy(gap, Alignment.CenterVertically),
+    ) {
+        val fKeys = listOf(Msx.K_F1, Msx.K_F2, Msx.K_F3, Msx.K_F4, Msx.K_F5)
+        // Function + editing row.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            if (left) {
+                fKeys.take(3).forEachIndexed { i, sym ->
+                    KeyCap(if (shift) "F${i + 6}" else "F${i + 1}", sym, Modifier.weight(1f),
+                        onDown = { mods.pressSpecial(session, sym, true) }, onUp = { mods.releaseChord(session, it) })
+                }
+                KeyCap("STOP", Msx.K_STOP, Modifier.weight(1.3f),
+                    onDown = { mods.pressSpecial(session, Msx.K_STOP, false) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("SEL", Msx.K_SELECT, Modifier.weight(1.3f),
+                    onDown = { mods.pressSpecial(session, Msx.K_SELECT, false) }, onUp = { mods.releaseChord(session, it) })
+            } else {
+                fKeys.drop(3).forEachIndexed { j, sym ->
+                    val i = j + 3
+                    KeyCap(if (shift) "F${i + 6}" else "F${i + 1}", sym, Modifier.weight(1f),
+                        onDown = { mods.pressSpecial(session, sym, true) }, onUp = { mods.releaseChord(session, it) })
+                }
+                KeyCap("INS", Msx.K_INSERT, Modifier.weight(1.2f),
+                    onDown = { mods.pressSpecial(session, Msx.K_INSERT, false) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("DEL", Msx.K_DELETE, Modifier.weight(1.2f),
+                    onDown = { mods.pressSpecial(session, Msx.K_DELETE, false) }, onUp = { mods.releaseChord(session, it) })
+            }
+        }
+
+        // Typewriter rows.
+        for (rowKeys in listOf(ROW1, ROW2, ROW3, ROW4)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                for (k in half(rowKeys)) {
+                    KeyCap(mods.faceOf(k), k.code, Modifier.weight(k.weight),
+                        onDown = { mods.pressKey(session, k) }, onUp = { mods.releaseChord(session, it) })
+                }
+            }
+        }
+
+        // Modifier row: CTRL/SHIFT/GRAPH/CODE (left) -- ESC/SPACE/RET (right).
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            if (left) {
+                ModKey("CTRL", mods.ctrl, Modifier.weight(1f)) { mods.ctrl = !mods.ctrl }
+                ModKey("SHIFT", mods.shift, Modifier.weight(1f)) { mods.shift = !mods.shift }
+                ModKey("GRAPH", mods.graph, Modifier.weight(1.1f)) { mods.graph = !mods.graph }
+                ModKey("CODE", mods.code, Modifier.weight(1f)) { mods.code = !mods.code }
+            } else {
+                KeyCap("ESC", Msx.K_ESCAPE, Modifier.weight(1f),
+                    onDown = { mods.pressSpecial(session, Msx.K_ESCAPE, false) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("SPACE", Msx.K_SPACE, Modifier.weight(2.4f),
+                    onDown = { mods.pressPlain(session, Msx.K_SPACE, 32) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("RET", Msx.K_RETURN, Modifier.weight(1.6f),
+                    onDown = { mods.pressPlain(session, Msx.K_RETURN, 13) }, onUp = { mods.releaseChord(session, it) })
+            }
+        }
+
+        // Bottom: CAP/KANA/TAB/BS (left) -- HOME + cursor diamond (right).
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            if (left) {
+                ModKey("CAP", mods.caps, Modifier.weight(1f)) { mods.caps = !mods.caps; session.tapKey(Msx.K_CAPS, 0, 0) }
+                ModKey("かな", mods.kana, Modifier.weight(1f)) { mods.kana = !mods.kana; session.tapKey(Msx.K_CODE, 0, 0) }
+                KeyCap("TAB", Msx.K_TAB, Modifier.weight(1f),
+                    onDown = { mods.pressPlain(session, Msx.K_TAB, 9) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("BS", Msx.K_BACKSPACE, Modifier.weight(1f),
+                    onDown = { mods.pressPlain(session, Msx.K_BACKSPACE, 8) }, onUp = { mods.releaseChord(session, it) })
+            } else {
+                KeyCap(if (shift) "CLS" else "HOME", Msx.K_HOME, Modifier.weight(1.2f),
+                    onDown = { mods.pressSpecial(session, Msx.K_HOME, true) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("←", Msx.K_LEFT, Modifier.weight(1f), onDown = { mods.pressSpecial(session, Msx.K_LEFT, false) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("↓", Msx.K_DOWN, Modifier.weight(1f), onDown = { mods.pressSpecial(session, Msx.K_DOWN, false) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("↑", Msx.K_UP, Modifier.weight(1f), onDown = { mods.pressSpecial(session, Msx.K_UP, false) }, onUp = { mods.releaseChord(session, it) })
+                KeyCap("→", Msx.K_RIGHT, Modifier.weight(1f), onDown = { mods.pressSpecial(session, Msx.K_RIGHT, false) }, onUp = { mods.releaseChord(session, it) })
+            }
+        }
+    }
+}
+
 /** The gated key-press haptic pulse, supplied by [MsxKeyboard] and fired by each key. */
 private val LocalKeyHaptic = staticCompositionLocalOf<() -> Unit> { {} }
+/** Split-layout key sizing, supplied by [LandscapeSplitKeyboard]; null = compact defaults. */
+private val LocalKeyHeight = staticCompositionLocalOf<Dp?> { null }
+private val LocalKeyFont = staticCompositionLocalOf<TextUnit?> { null }
 
 /**
  * A momentary keycap: presses on touch-down and releases on touch-up, so the
@@ -292,6 +461,10 @@ private val LocalKeyHaptic = staticCompositionLocalOf<() -> Unit> { {} }
  */
 @Composable
 private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onDown: () -> List<Int>, onUp: (List<Int>) -> Unit) {
+    val compact = compactKeyboard()
+    // Split landscape supplies an explicit height/font so keys fill the tall flank.
+    val h = LocalKeyHeight.current ?: if (compact) 28.dp else 46.dp
+    val fsize = LocalKeyFont.current ?: if (compact) 11.sp else 13.sp
     // Timestamp of the last accepted press, for contact-jitter debounce. A plain
     // holder (not Compose state) so updating it doesn't trigger recomposition.
     val lastDownMs = remember { longArrayOf(0L) }
@@ -312,7 +485,7 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
     val haptic by rememberUpdatedState(LocalKeyHaptic.current)
     Box(
         modifier = modifier
-            .height(if (compactKeyboard()) 28.dp else 46.dp)
+            .height(h)
             .clip(shape)
             .background(if (focused) FocusAmber else KeyBg)
             .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
@@ -358,7 +531,7 @@ private fun KeyCap(label: String, keyId: Any, modifier: Modifier = Modifier, onD
         Text(
             label,
             color = if (focused) Color.Black else KeyText,
-            fontSize = if (compactKeyboard()) 11.sp else 13.sp,
+            fontSize = fsize,
             textAlign = TextAlign.Center,
             maxLines = 1,
         )
@@ -371,6 +544,8 @@ private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier
     // TV layout), styled to match KeyCap with the FS-A1 inverted "lit" state.
     // clickable is already D-pad-focusable; add the bright focus highlight too.
     val compact = compactKeyboard()
+    val h = LocalKeyHeight.current ?: if (compact) 28.dp else 46.dp
+    val fsize = LocalKeyFont.current ?: if (compact) 10.sp else 11.sp
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(6.dp)
@@ -387,7 +562,7 @@ private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier
     }
     Box(
         modifier = modifier
-            .height(if (compact) 28.dp else 46.dp)
+            .height(h)
             .clip(shape)
             .background(cap)
             .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)
@@ -397,7 +572,7 @@ private fun ModKey(label: String, active: Boolean, modifier: Modifier = Modifier
         Text(
             label,
             color = txt,
-            fontSize = if (compact) 10.sp else 11.sp,
+            fontSize = fsize,
             textAlign = TextAlign.Center,
             maxLines = 1,
         )

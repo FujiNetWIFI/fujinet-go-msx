@@ -90,7 +90,15 @@ fun EmulatorScreen(
             onShutdown = onShutdown,
         )
 
-        if (landscape && overlay == Overlay.JOYSTICK) {
+        if (landscape && overlay == Overlay.KEYBOARD) {
+            // Landscape: split the keyboard into two halves placed in the pillar-box
+            // margins beside the 4:3 picture, so the display keeps full height.
+            LandscapeSplitKeyboard(
+                session = session,
+                hapticsEnabled = keyboardHaptics,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+        } else if (landscape && overlay == Overlay.JOYSTICK) {
             // Landscape: flank the screen with the stick (left) and fire buttons
             // (right) so the surface fills the full height between them.
             Row(modifier = Modifier.fillMaxWidth().weight(1f)) {

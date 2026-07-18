@@ -22,7 +22,8 @@ import online.fujinet.go.msx.SessionController
 // The MSX display is presented at its native ~4:3 aspect; openMSX delivers the
 // active picture (with border) as an XRGB8888 frame to the host
 // (session_runtime.cpp::PresentTo), and the surface letterboxes to 4:3.
-private const val FRAME_RATIO = 4f / 3f
+// Internal so the landscape split keyboard can size its flanks to the pillar-box margins.
+internal const val FRAME_RATIO = 4f / 3f
 
 /**
  * Hosts the MSX video output. The native layer renders openMSX's XRGB8888 frames
