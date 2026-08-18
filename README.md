@@ -23,18 +23,16 @@ SLIP **listener**, and openMSX's `FujiNet` device (`src/serial/FujiNet.cc`) is
 the **client** that connects out to `127.0.0.1:1985`. To the user it is
 transparent — boot the MSX and the FujiNet CONFIG cartridge is just there.
 
-## System selection, C-BIOS and profiles
+## System selection and C-BIOS
 
 - Boots **C-BIOS** (the freely-redistributable BIOS, bundled from openMSX's
   `Contrib/cbios`) for **MSX / MSX2 / MSX2+** out of the box — no copyrighted
-  ROMs required.
-- **Import your own system ROMs** (Storage Access Framework) to run real
-  machines, including **MSX turboR** (which C-BIOS does not cover).
-- **Machine profiles** let you name and switch between configurations (system
-  type + C-BIOS vs imported ROMs). The active profile's openMSX machine id is
-  written to `machine.id` and booted on the next (re)start.
+  ROMs required or included.
+- The system type (MSX / MSX2 / MSX2+) is chosen in Settings; the selected
+  openMSX machine id is written to `machine.id` and booted on the next
+  (re)start. MSX turboR is not offered: it has no C-BIOS.
 
-See the **Cfg** button in the control bar.
+See the **Settings** button in the control bar.
 
 ## Architecture
 

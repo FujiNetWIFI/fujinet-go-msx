@@ -89,6 +89,12 @@ tasks.configureEach {
     if (name.contains("Release") || name == "preBuild") {
         dependsOn(prepareFujiNetRuntime)
     }
+    // Release builds must link the real openMSX core (the CMakeLists guard
+    // FATAL_ERRORs on the stub in Release); debug builds stay unwired so the
+    // Phase 1 stub still builds fast on machines without the staged tree.
+    if (name.contains("Release")) {
+        dependsOn(prepareOpenMsxCore)
+    }
 }
 
 tasks.matching { task ->
@@ -121,8 +127,8 @@ android {
         applicationId = "online.fujinet.go.msx"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9 
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "1.0.0"
         buildConfigField("String", "OPENMSX_VERSION", "\"${openMsxVersion}\"")
         buildConfigField("String", "FUJINET_RUNTIME_VERSION", "\"${fujiNetRuntimeVersion}\"")
 
@@ -156,6 +162,7 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
+            ndk { debugSymbolLevel = "FULL" }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

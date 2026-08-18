@@ -106,6 +106,15 @@ if(EXISTS "${OPENMSX_INSTALL}/lib")
             GLESv3 GLESv2 EGL OpenSLES
     )
 else()
+    # A Release artifact must never silently ship the stub core -- that is a
+    # broken app, and Play uploads are hard to claw back. Debug keeps the
+    # warning-only behavior for bring-up on machines without the staged tree.
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        message(FATAL_ERROR
+            "msxcore: staged openMSX not found at ${OPENMSX_INSTALL}; release "
+            "builds must not ship the Phase 1 stub core. Run "
+            "tools/openmsx/build-openmsx-core.sh first.")
+    endif()
     message(WARNING
         "msxcore: staged openMSX not found at ${OPENMSX_INSTALL}; building the "
         "Phase 1 stub core. Run tools/openmsx/build-openmsx-core.sh to embed openMSX.")

@@ -50,11 +50,12 @@ C-BIOS team), bundled from openMSX's `Contrib/cbios`. C-BIOS is **freely
 redistributable** (see `Contrib/README.cbios`), so a distributed build needs no
 copyrighted firmware to boot.
 
-### User-imported system ROMs — not bundled
-Real-machine and **MSX turboR** ROMs are **never** shipped with the app. They are
-imported by the end user from their own storage (Settings → System ROMs) into the
-app's private storage, and bound to a machine profile at boot. Manufacturer MSX
-ROMs are copyrighted firmware; distributing them is the user's responsibility.
+### Manufacturer system ROMs — not bundled, not importable
+Real-machine and **MSX turboR** ROMs are **never** shipped with the app, and
+the app currently offers no way to import them: it boots C-BIOS machines only
+(MSX / MSX2 / MSX2+). Manufacturer MSX ROMs are copyrighted firmware. (An
+earlier revision shipped a Storage Access Framework import flow and machine
+profiles; that feature was removed and these documents now match the code.)
 
 ## Net effect
 

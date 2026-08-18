@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.0
+
+Google Play readiness release. No emulation changes — the app already ships
+only the freely redistributable C-BIOS.
+
+### Changed
+- Documentation (COMPLIANCE, THIRD_PARTY_NOTICES, README, zapstore.yaml) no
+  longer advertises the system-ROM import, machine profiles, or MSX turboR
+  support that were removed in an earlier revision; the docs now match the
+  code. The vendored SDL2 Java shim (`org/libsdl/app/`) is now explicitly
+  attributed.
+- Release builds fail configuration if the staged openMSX archives are
+  absent instead of silently shipping the Phase 1 stub core, and release
+  tasks now trigger the openMSX staging step themselves.
+- Cleartext HTTP scoped to the loopback FujiNet web UI via a network
+  security config; release builds carry full native debug symbols.
+
+### Added
+- Release signing via `keystore.properties`, `tools/release-play.sh`
+  (signed AAB), privacy policy under `docs/`, and a Play submission
+  checklist.
+
 ## 0.1.0 (in progress)
 
 First scaffold of FujiNet Go MSX: the openMSX emulator and the FujiNet firmware

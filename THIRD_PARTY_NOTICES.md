@@ -23,6 +23,9 @@ FujiNet Go MSX incorporates the following third-party software. See
 ## SDL2
 - Copyright © Sam Lantinga and contributors.
 - License: zlib license. (Statically built by the openMSX Android chain.)
+- The Java-side SDL activity shim (`app/src/main/java/org/libsdl/app/`,
+  vendored from SDL2 2.30.7 with a FujiNet Go external-surface patch) is
+  likewise zlib-licensed.
 
 ## Tcl
 - Copyright © the Tcl Core Team and contributors.
@@ -69,7 +72,8 @@ FujiNet Go MSX incorporates the following third-party software. See
 - Copyright © Jean-loup Gailly and Mark Adler.
 - License: zlib license.
 
-## User-imported MSX system ROMs
+## Manufacturer MSX system ROMs
 - Real-machine / MSX turboR firmware images are copyrighted by their respective
-  manufacturers, are **not** bundled, and are supplied by the end user. See the
-  ROM note in [COMPLIANCE.md](./COMPLIANCE.md).
+  manufacturers and are **not** bundled (the app boots the freely
+  redistributable C-BIOS only). See the ROM note in
+  [COMPLIANCE.md](./COMPLIANCE.md).
