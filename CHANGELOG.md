@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1
+
+### Fixed
+- FujiNet went silent for any program launched from the FujiNet CONFIG ROM.
+  The emulated cartridge stopped decoding its own receive and status
+  registers once a user ROM was mapped in, so a program could send a request
+  but never see the answer and would wait for it forever. Fixed upstream in
+  the FujiNetWIFI openMSX fork (`b9adad302`) and picked up by rebuilding the
+  staged core.
+
+### Changed
+- The bundled openMSX core moves forward three further upstream commits: a
+  console command to toggle the config ROM, and two config ROM refreshes.
+
 ## 1.0.0
 
 Google Play readiness release. No emulation changes — the app already ships
