@@ -63,18 +63,21 @@ fun EmulatorScreen(
     // resume so a change there takes effect on return without restarting the session.
     var keyboardHaptics by remember { mutableStateOf(session.keyboardHapticsEnabled) }
     var joystickHaptics by remember { mutableStateOf(session.joystickHapticsEnabled) }
+    var interfaceHaptics by remember { mutableStateOf(session.interfaceHapticsEnabled) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 keyboardHaptics = session.keyboardHapticsEnabled
                 joystickHaptics = session.joystickHapticsEnabled
+                interfaceHaptics = session.interfaceHapticsEnabled
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    ProvideUiHaptics(enabled = interfaceHaptics) {
     Column(modifier = modifier.fillMaxSize()) {
         ControlBar(
             keyboardActive = overlay == Overlay.KEYBOARD,
@@ -130,6 +133,7 @@ fun EmulatorScreen(
             }
         }
     }
+    }
 }
 
 private enum class Overlay { NONE, KEYBOARD, JOYSTICK }
@@ -165,8 +169,9 @@ private fun ControlBar(
  */
 @Composable
 private fun FujiNetBarButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val blip = LocalUiHaptic.current
     TextButton(
-        onClick = onClick,
+        onClick = { blip(); onClick() },
         modifier = modifier,
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
     ) {
@@ -187,8 +192,9 @@ private fun BarButton(
     active: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val blip = LocalUiHaptic.current
     TextButton(
-        onClick = onClick,
+        onClick = { blip(); onClick() },
         modifier = modifier,
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
     ) {

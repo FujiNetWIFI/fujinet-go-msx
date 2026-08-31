@@ -48,13 +48,18 @@ fun SettingsScreen(
     val session = remember { SessionController.get(context) }
     var keyboardHaptics by remember { mutableStateOf(session.keyboardHapticsEnabled) }
     var joystickHaptics by remember { mutableStateOf(session.joystickHapticsEnabled) }
+    var interfaceHaptics by remember { mutableStateOf(session.interfaceHapticsEnabled) }
 
+    // Re-provided from the live value so switching Interface haptics off goes
+    // quiet on the very next tap in this dialog.
+    ProvideUiHaptics(enabled = interfaceHaptics) {
+    val blip = LocalUiHaptic.current
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
-            TextButton(onClick = { store.save(systemType); onApplyRestart() }) { Text("Apply & Restart") }
+            TextButton(onClick = { blip(); store.save(systemType); onApplyRestart() }) { Text("Apply & Restart") }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
+        dismissButton = { TextButton(onClick = { blip(); onClose() }) { Text("Close") } },
         title = { Text("FujiNet Go MSX — Settings") },
         text = {
             Column(
@@ -63,13 +68,14 @@ fun SettingsScreen(
             ) {
                 Text("System type", style = MaterialTheme.typography.titleSmall)
                 MsxSystemType.entries.forEach { type ->
+                    val select = { blip(); systemType = type }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .selectable(selected = systemType == type, onClick = { systemType = type }),
+                            .selectable(selected = systemType == type, onClick = select),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = systemType == type, onClick = { systemType = type })
+                        RadioButton(selected = systemType == type, onClick = select)
                         Text(type.displayName)
                     }
                 }
@@ -89,9 +95,14 @@ fun SettingsScreen(
                     joystickHaptics = it
                     session.joystickHapticsEnabled = it
                 }
+                ToggleRow("Interface haptics", interfaceHaptics) {
+                    interfaceHaptics = it
+                    session.interfaceHapticsEnabled = it
+                }
             }
         },
     )
+    }
 }
 
 @Composable
@@ -106,6 +117,7 @@ private fun ToggleRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        val blip = LocalUiHaptic.current
+        Switch(checked = checked, onCheckedChange = { blip(); onCheckedChange(it) })
     }
 }

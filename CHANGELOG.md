@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.2
+
+### Added
+- **Every on-screen control now answers with a tactile blip.** Until now only
+  the emulated machine's own controls -- the MSX keyboard, the joystick and the
+  fire buttons -- pulsed under a fingertip, while the app's own controls said
+  nothing back. The toolbar buttons and everything in Settings (both haptics
+  switches, the MSX / MSX2 / MSX2+ system-type rows, Apply & Restart and Close)
+  now give the same short confirmation.
+- **A third haptics switch, "Interface haptics", in Settings.** It governs the
+  app's own controls only, so the toolbar and the dialogs can be silenced
+  without giving up the pulse under the keyboard and the joystick, or the other
+  way round. It is on by default, and its pulse is deliberately lighter than a
+  keypress: tapping Settings is incidental, pressing a key is the point.
+
 ## 1.0.1
 
 ### Fixed

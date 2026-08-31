@@ -38,6 +38,11 @@ class SessionController private constructor(private val context: Context) {
     var joystickHapticsEnabled: Boolean
         get() = prefs.getBoolean(KEY_JOYSTICK_HAPTICS, true)
         set(value) { prefs.edit().putBoolean(KEY_JOYSTICK_HAPTICS, value).apply() }
+    /** The app's own controls (toolbar, Settings, the ROM gate), kept separate
+     * from the keyboard and joystick pulses so each can be silenced alone. */
+    var interfaceHapticsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_INTERFACE_HAPTICS, true)
+        set(value) { prefs.edit().putBoolean(KEY_INTERFACE_HAPTICS, value).apply() }
 
     /**
      * openMSX is an SDL app; SDL's Android audio/video drivers need their JNI
@@ -207,6 +212,7 @@ class SessionController private constructor(private val context: Context) {
         private const val KEY_HOLD_MS = 80L
         private const val KEY_KEYBOARD_HAPTICS = "keyboardHaptics"
         private const val KEY_JOYSTICK_HAPTICS = "joystickHaptics"
+        private const val KEY_INTERFACE_HAPTICS = "interfaceHaptics"
 
         fun get(context: Context): SessionController =
             instance ?: synchronized(this) {
