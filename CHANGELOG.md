@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.3
+
+### Changed
+- **The bundled FujiNet runtime no longer builds against Mbed TLS 4.x.** That
+  release removed the low-level crypto headers the runtime's TLS backend needs
+  and split the rest into a separate library, so a build machine whose system
+  Mbed TLS had moved to 4.x could produce a runtime with broken TLS instead of
+  failing outright. The build now requires a 3.x install, or stops and says so.
+- **The bundled runtime jumps a long way forward.** It had been pinned well
+  behind the other FujiNet Go apps; it now tracks the same firmware as the
+  rest.
+
+### Added
+- The Gmail and Google Drive network protocols, and the CALENDAR, GCAL and
+  ICAL calendar protocols, are now available to programs running on the
+  emulated MSX.
+
 ## 1.0.2
 
 ### Added
