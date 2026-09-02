@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.4
+
+### Changed
+- **The bundled FujiNet runtime is rebuilt from upstream `master`
+  (`13465cdd`).** The previous build came from `force-mbedtls-3`, a branch that
+  was never merged, so the runtime had been standing still while upstream moved
+  on. The Mbed TLS 3.x requirement it was branched for has landed, and this
+  picks up the device-chain rework and the Drivewire cassette media format
+  alongside it.
+
 ## 1.0.3
 
 ### Changed
