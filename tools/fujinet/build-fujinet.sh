@@ -241,6 +241,13 @@ patch("build.sh", [
         '        pip install platformio pyyaml jinja2 || exit 1\n',
     ),
     (
+        # build.sh makes a fresh venv in build/.venv for a PC build and wants
+        # pyyaml + jinja2 in it; let the host's copies satisfy that check, as
+        # fujinet-go-msx-desktop does.
+        '        ${PYTHON} -m venv "${VENV_ROOT}" || exit 1\n',
+        '        ${PYTHON} -m venv --system-site-packages "${VENV_ROOT}" || exit 1\n',
+    ),
+    (
         # The PC build runs its unit tests via ctest after building. For an Android
         # cross-build the test binaries target the device, so running them on this
         # host fails with "Exec format error". Skip them when cross-compiling.
@@ -252,6 +259,15 @@ patch("build.sh", [
 
 # --- fujinet_pc.cmake: SHARED target, mbedTLS, expat, dist ----------------
 patch("fujinet_pc.cmake", [
+    (
+        # Upstream builds with -Werror (#1960). NDK clang warns that libssh's
+        # -fstack-clash-protection is unused on armeabi-v7a, which then fails
+        # the build; keep -Werror for host builds only.
+        'add_compile_options(-Werror)\n',
+        'if(NOT FUJINET_ANDROID)\n'
+        '    add_compile_options(-Werror)\n'
+        'endif()\n',
+    ),
     (
         'add_executable(fujinet ${SOURCES})\n',
         'if(FUJINET_ANDROID)\n'

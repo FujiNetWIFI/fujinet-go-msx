@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.5
+
+### Fixed
+- **Cartridge ROMs mounted from FujiNet CONFIG boot again.** Booting any
+  `.rom` crashed the emulator, because the FujiNet cartridge device read a
+  mapper type the firmware no longer sent. MSX megaROMs named with their
+  mapper, such as `game[ASCII8].rom` (also `[ASCII16]`, `[Konami]`,
+  `[KonamiSCC]`), now switch banks correctly. An untagged ROM loads as a
+  plain cartridge.
+
+### Changed
+- The bundled FujiNet runtime is built from fujinet-firmware `bc2aca35`
+  (PR #2002), and the openMSX core from `feat/fujinet` `b23ff675`.
+
 ## 1.0.4
 
 ### Changed
